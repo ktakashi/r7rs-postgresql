@@ -1,5 +1,6 @@
 (import (scheme base)
 	(digest md5)
+	(misc bytevectors)
 	(postgresql messages)
 	)
 
@@ -59,8 +60,10 @@
 
 (test-begin "Digest MD5")
 
-(test-equal "d41d8cd98f00b204e9800998ecf8427e" (md5 ""))
-(test-equal "900150983cd24fb0d6963f7d28e17f72" (md5 "abc"))
+(test-equal "d41d8cd98f00b204e9800998ecf8427e"
+	    (md5 ""))
+(test-equal "900150983cd24fb0d6963f7d28e17f72"
+	    (md5 "abc"))
 (test-equal "9e107d9d372bb6826bd81d3542a419d6"
 	    (md5 "The quick brown fox jumps over the lazy dog"))
 

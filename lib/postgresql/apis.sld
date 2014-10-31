@@ -33,11 +33,16 @@
 	  postgresql-open-connection!
 	  postgresql-login)
   (import (scheme base)
-	  (srfi 106)
-	  (postgresql messages))
+	  (scheme write)
+	  (scheme char)
+	  (postgresql messages)
+	  (digest md5)
+	  (misc socket)
+	  (misc bytevectors))
   (begin
     (define-record-type postgresql-connection 
-      %make-postgresql-connection postgresql-connection?
+      (%make-postgresql-connection host port database username password)
+      postgresql-connection?
       (host     postgresql-connection-host)
       (port     postgresql-connection-port)
       (database postgresql-connection-database)
@@ -46,12 +51,13 @@
       ;; after it's opened
       (socket   postgresql-connection-socket postgresql-connection-socket-set!)
       ;; 
-      (sock-in  postgresql-connection-sock-in postgresql-connection-sock-in-set!)
+      (sock-in  postgresql-connection-sock-in
+		postgresql-connection-sock-in-set!)
       (sock-out postgresql-connection-sock-out 
 		postgresql-connection-sock-out-set!))
     
     (define (make-postgresql-connection host port database user pass)
-      (%make-postgresql-connection host port database user pass #f))
+      (%make-postgresql-connection host port database user pass))
 
     (define (postgresql-open-connection! conn)
       (let ((s (make-client-socket (postgresql-connection-host conn)
@@ -67,14 +73,39 @@
 	    (user (postgresql-connection-username conn))
 	    (pass (postgresql-connection-password conn))
 	    (database (let ((d (postgresql-connection-database conn)))
-			(if d '() (list "database" d)))))
+			(if d (list (cons "database" d)) '()))))
 	(postgresql-send-startup-message out (cons (cons "user" user) database))
 	;; authenticate
-	(let-values (((code payload) (postgresql-read-response in)))
-	  (unless (char=? code #\R)
-	    (error "postgresql-login: server respond unexpected message" code))
-	  ;; get content
-	  )))
-    )
+	(let loop ((first #t))
+	  ;; concat('md5', md5(concat(md5(concat(password, username)),
+	  ;;                          random-salt)))
+	  ;; PostgreSQL md5 function returns hex string in small letters,
+	  ;; so we need to do some trick here.
+	  ;; it horribly sucks but it's inevitable...
+	  (define (construct payload)
+	    (let* ((pu5 (md5 (string-append pass user)))
+		   (pus5 (md5 (bytevector-append (string->utf8 pu5) 
+						 (bytevector-copy payload 4)))))
+	      (string-append "md5" pus5)))
+	  (define (send-password conn payload)
+	    (unless first
+	      (error "postgresql-login: failed to login"))
+	    (if (= (bytevector-length payload) 4)
+		(postgresql-send-password-message out pass)
+		(postgresql-send-password-message out (construct payload))))
+	  (let-values (((code payload) (postgresql-read-response in)))
+	    (unless (char=? code #\R)
+	      (close-conn conn)
+	      (error "postgresql-login: server respond unexpected message"
+		     code))
+	    ;; get content
+	    (case (bytevector-u32-ref-be payload 0)
+	      ((0) #t) ;; ok
+	      ((3) (send-password conn payload) (loop #f))
+	      ((5) (send-password conn payload) (loop #f))
+	      (else 
+	       (close-conn conn)
+	       (error "postgresql-login: unsupported login method")))))))
 
-  )
+    )
+)

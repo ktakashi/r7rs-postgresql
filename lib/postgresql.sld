@@ -1,6 +1,6 @@
 ;;; -*- mode:scheme; coding:utf-8; -*-
 ;;;
-;;; postgresql/messages.sld - PostgreSQL protocol messages
+;;; postgresql.sld - PostgreSQL bindings
 ;;;  
 ;;;   Copyright (c) 2014  Takashi Kato  <ktakashi@ymail.com>
 ;;;   
@@ -28,38 +28,9 @@
 ;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;  
 
-;; TODO should we return string???
-(define-library (digest md5)
-  (import (scheme base))
-  (cond-expand
-   (sagittarius
-    (import (math) (misc bytevectors) (rnrs))
-    (begin
-      (define (md5 src)
-	(let ((bv (cond ((string? src) (string->utf8 src))
-			((bytevector? src) src)
-			(else
-			 (error "md5: must be string or bytevector" src)))))
-	  
-	  (bytevector->hex-string (hash MD5 bv))))))
-   (else
-    (cond-expand
-     ((library (rnrs))
-      (import (rename (only (rnrs)
-			    bitwise-and bitwise-ior bitwise-xor
-			    bitwise-arithmetic-shift)
-		      (bitwise-arithmetic-shift arithmetic-shift))))
-     ((library (srfi 60))
-      (import (srfi 60)))
-     ((library (srfi 33))
-      (import (srfi 33)))
-     (else (begin (error '(digest md5) "bitwise library is required"))))
-    (import (misc bytevectors))
-    (include "md5.scm")
-    #;
-    (begin
-      (define (%md5 src)
-	(let ((s (md5 src)))
-	  (hex-string->bytevector s))))))
-  (export md5 #;(rename %md5 md5)
-	  ))
+;; forwarding
+(define-library (postgresql)
+  (import (postgresql apis))
+  (export make-postgresql-connection
+	  postgresql-open-connection!
+	  postgresql-login))

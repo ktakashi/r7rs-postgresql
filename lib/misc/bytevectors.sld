@@ -31,31 +31,86 @@
 (define-library (misc bytevectors)
   (cond-expand
    (sagittarius
-    (import (rnrs) (sagittarius))
+    (import (rnrs)
+	    (sagittarius) 
+	    (sagittarius control))
     (begin
       (define (bytevector-u16-ref-le bv index)
 	  (bytevector-u16-ref bv index (endianness little)))
       (define (bytevector-u32-ref-be bv index)
 	(bytevector-u32-ref bv index (endianness big)))
-      ))
+      (define (bytevector->hex-string bv)
+	(call-with-string-output-port
+	 (lambda (out)
+	   (dotimes (i (bytevector-length bv))
+	     (format out "~2,'0x" (bytevector-u8-ref bv i))))))))
    ((library (chibi bytevector))
     (import (chibi bytevector)))
-   ((library (srfi 60))
-    (import (scheme base) (srfi 60))
-    (define (bytevector-u16-ref-le str i)
-      (+ (bytevector-u8-ref str i)
-	 (arithmetic-shift (bytevector-u8-ref str (+ i 1)) 8)))
-    (define (bytevector-u32-ref-be str i)
-      (+ (arithmetic-shift (bytevector-u8-ref str i) 24)
-	 (arithmetic-shift (bytevector-u8-ref str (+ i 1)) 16)
-	 (arithmetic-shift (bytevector-u8-ref str (+ i 2)) 8)
-	 (bytevector-u8-ref str (+ i 3))))
-    (define (bytevector->integer bv)
-      (let ((len (bytevector-length bv)))
-	(let lp ((i 0) (n 0))
-	  (if (>= i len)
-	      n
-	      (lp (+ i 1)
-		  (+ (arithmetic-shift n 8)
-		     (bytevector-u8-ref bv i)))))))))
-  (export bytevector-u16-ref-le bytevector-u32-ref-be bytevector->integer))
+   (else
+    (cond-expand
+     ((library (srfi 60))
+      (import (srfi 60)))
+     ((library (srfi 33))
+      (import (srfi 33))))
+    (import (scheme base) (scheme char))
+    (begin
+      (define (bytevector-u16-ref-le str i)
+	(+ (bytevector-u8-ref str i)
+	   (arithmetic-shift (bytevector-u8-ref str (+ i 1)) 8)))
+      (define (bytevector-u32-ref-be str i)
+	(+ (arithmetic-shift (bytevector-u8-ref str i) 24)
+	   (arithmetic-shift (bytevector-u8-ref str (+ i 1)) 16)
+	   (arithmetic-shift (bytevector-u8-ref str (+ i 2)) 8)
+	   (bytevector-u8-ref str (+ i 3))))
+      (define (bytevector->integer bv)
+	(let ((len (bytevector-length bv)))
+	  (let lp ((i 0) (n 0))
+	    (if (>= i len)
+		n
+		(lp (+ i 1)
+		    (+ (arithmetic-shift n 8)
+		       (bytevector-u8-ref bv i)))))))
+      (define (hex-string->bytevector str)
+	;; make the same as following
+	;; (integer->bytevector (string->number str 16))
+	;; so it needs to handle odd length string as well
+	;; thus "123" would be #vu8(#x01 #x23)
+	(define (safe-ref s i)
+	  (if (< i 0) #\0 (string-ref s i)))
+	(define (->hex c)
+	  (if (memv c '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9
+			#\A #\B #\C #\D #\E #\F
+			#\a #\b #\c #\d #\e #\f))
+	      (or (digit-value c) ;; easy
+		  (let ((c (char-upcase c)))
+		    ;; must be A-F
+		    (- (char->integer c) #x37)))
+	      (error "hex-string->bytevector: non hex character" c str)))
+	(let* ((len (string-length str))
+	       (bv (make-bytevector (ceiling (/ len 2)))))
+	  (let loop ((i (- (bytevector-length bv) 1)) (j (- len 1)))
+	    (if (< i 0)
+		bv
+		(let ((h (->hex (safe-ref str (- j 1))))
+		      (l (->hex (safe-ref str j))))
+		  (bytevector-u8-set! bv i 
+				      (bitwise-ior (arithmetic-shift h 4) l))
+		  (loop (- i 1) (- j 2)))))))
+      (define (integer->hex-string n)
+	(let* ((res (number->string n 16))
+	       (len (string-length res)))
+	  (if (even? len)
+	      res
+	      (string-append "0" res))))
+      (define (bytevector->hex-string bv)
+	(let ((out (open-output-string))
+	      (len (bytevector-length bv)))
+	  (let lp ((i 0))
+	    (cond
+	     ((>= i len)
+	      (get-output-string out))
+	     (else
+	      (write-string (integer->hex-string (bytevector-u8-ref bv i)) out)
+	      (lp (+ i 1))))))))))
+  (export bytevector-u16-ref-le bytevector-u32-ref-be bytevector->integer
+	  hex-string->bytevector bytevector->hex-string))
