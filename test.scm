@@ -87,6 +87,12 @@
 		  112 97 115 115 119 111 114 100 0)
 	      (get-output-bytevector out)))
 
+(let ((out (open-output-bytevector)))
+  (postgresql-send-terminate-message out)
+  (test-equal #u8(88 ;; #\X
+		  0 0 0 4)
+	      (get-output-bytevector out)))
+
 (test-end)
 
 (test-end)

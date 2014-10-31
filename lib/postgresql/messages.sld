@@ -78,7 +78,26 @@
 	    (loop (cdr params))))
 	(write-u8 0 out)
 	(flush-output-port out)))
-    
+
+    ;; FIXME the same thing in apis.sld...
+    (define (read-null-terminated-string params i)
+      (let ((out (open-output-string)))
+	(let loop ((i i))
+	  (let ((b (bytevector-u8-ref params i)))
+	    (if (zero? b)
+		(values (+ i 1) (get-output-string out))
+		(begin
+		  (write-char (integer->char b) out)
+		  (loop (+ i 1))))))))
+    (define (parse-message-fields message)
+      (let loop ((offset 0) (r '()))
+	(let ((code (integer->char (bytevector-u8-ref message offset))))
+	  (if (char=? code #\null)
+	      r
+	      (let-values (((offset value) 
+			    (read-null-terminated-string message (+ offset 1))))
+		(loop offset (cons (cons code value) r)))))))
+
     ;; it's not specified but all messages except startup
     ;; and ssl request start message type (byte1) and length (int32)
     (define (postgresql-read-response in)
@@ -86,12 +105,14 @@
 	     (size (bytevector->integer (read-bytevector 4 in)))
 	     (payload (read-bytevector (- size 4) in)))
 	(if (char=? ch #\E)
-	    (let ((code (read-u8 in)))
-	      (if (zero? code) ;; terminate just raise an error
-		  (error "read-response: unknown error")
-		  (let ((code-char (string (integer->char code))))
-		    (error (string-append "read-response: " code-char)
-			   (utf8->string payload 1)))))
+	    (let ((fields (parse-message-fields payload)))
+	      (define (msg fields)
+		(define (get n)
+		  (cond ((assv n fields) => cdr) (else "")))
+		;; TODO should we also show source line or so?
+		(string-append (get #\S) " [" (get #\C) "] " (get #\M)
+			       " at '" (get #\R) "' "(get #\F) ":" (get #\L)))
+	      (error (msg fields)))
 	    (values ch payload))))
 
     (define (postgresql-send-password-message out password)
