@@ -33,13 +33,17 @@
    ((library (srfi 106))
     (import (srfi 106)))
    (chibi
-    (import (scheme base) (chibi net))
+    ;; only support what we need.
+    (import (scheme base) (chibi net) (scheme cxr) (chibi filesystem))
     (begin
-      ;; TODO
-      (define (make-client-socket host port . opt) #f)
-      (define (socket-input-port sock) #t)
-      (define (socket-output-port sock) #t)
-      (define (socket-close sock) #t)
+      (define (make-client-socket host port . opt)
+	(let ((r (open-net-io host port)))
+	  (unless r (error "make-client-socket: failed to create a socket"))
+	  r))
+      (define (socket-input-port sock) (cadr sock))
+      (define (socket-output-port sock) (caddr sock))
+      (define (socket-close sock) (close-file-descriptor (car sock)))
+      ;; do nothing for now
       (define (socket-shutdown sock how) #t)
       )))
   (export make-client-socket socket-input-port socket-output-port

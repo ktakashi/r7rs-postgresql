@@ -11,7 +11,7 @@ test_sagittarius()
 test_gauche()
 {
     $GOSH -r7 -e '(set! *load-suffixes* (cons ".sld" *load-suffixes*))' \
-	-e "(append! *load-path* (list \"lib\" \".\"))" test.scm
+	-Ilib test.scm
 }
 
 test_chibi()

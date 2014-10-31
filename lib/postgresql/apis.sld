@@ -30,9 +30,17 @@
 
 (define-library (postgresql apis)
   (export make-postgresql-connection
+	  postgresql-connection?
 	  postgresql-open-connection!
 	  postgresql-login!
-	  postgresql-terminate!)
+	  postgresql-terminate!
+
+	  ;; simple query
+	  postgresql-query?
+	  postgresql-query-descriptions
+	  postgresql-execute-sql!
+	  postgresql-fetch-query!
+	  )
   (import (scheme base)
 	  (scheme write)
 	  (scheme char)
@@ -42,7 +50,7 @@
 	  (misc bytevectors))
   (begin
     (define-record-type postgresql-connection 
-      (%make-postgresql-connection host port database username password)
+      (make-postgresql-connection host port database username password)
       postgresql-connection?
       (host     postgresql-connection-host)
       (port     postgresql-connection-port)
@@ -59,9 +67,6 @@
       (params   postgresql-connection-params postgresql-connection-params-set!)
       (id       postgresql-connection-id postgresql-connection-id-set!)
       (key      postgresql-connection-key postgresql-connection-key-set!))
-    
-    (define (make-postgresql-connection host port database user pass)
-      (%make-postgresql-connection host port database user pass))
 
     (define (postgresql-open-connection! conn)
       (let ((s (make-client-socket (postgresql-connection-host conn)
@@ -74,18 +79,21 @@
     (define (close-conn conn)
       (socket-close (postgresql-connection-socket conn)))
 
+    ;; can be used anywhere
+    (define (read-null-terminated-string params i)
+      (let ((out (open-output-string)))
+	(let loop ((i i))
+	  (let ((b (bytevector-u8-ref params i)))
+	    (if (zero? b)
+		(values (+ i 1) (get-output-string out))
+		(begin
+		  (write-char (integer->char b) out)
+		  (loop (+ i 1))))))))
+
     (define (postgresql-login! conn)
+      (define read-string read-null-terminated-string)
       (define (store-params params)
 	(define len (bytevector-length params))
-	(define (read-string params i)
-	  (let ((out (open-output-string)))
-	    (let loop ((i i))
-	      (let ((b (bytevector-u8-ref params i)))
-		(if (zero? b)
-		    (values (+ i 1) (get-output-string out))
-		    (begin
-		      (write-char (integer->char b) out)
-		      (loop (+ i 1))))))))
 	;; convert it to alist ((name . value)) 
 	;; name is symbol, value is string
 	(let loop ((i 0) (r '()))
@@ -158,6 +166,99 @@
       (let ((out (postgresql-connection-sock-out conn)))
 	(postgresql-send-terminate-message out)
 	(close-conn conn)))
+
+    (define-record-type postgresql-query
+      (make-postgresql-query connection eoq)
+      postgresql-query?
+      (connection postgresql-query-connection)
+      (descriptions postgresql-query-descriptions 
+		    postgresql-query-descriptions-set!)
+      ;; end of query
+      (eoq          postgresql-query-eoq 
+		    postgresql-query-eoq-set!))
+
+    ;; parse description to a vector
+    ;; a description:
+    ;;  #(name table-id column-num type-id type-size type-modifier format-code)
+    (define (parse-row-description query payload)
+      (define read-string read-null-terminated-string)
+      (let* ((n (bytevector-u16-ref-be payload 0))
+	     (vec (make-vector n #f)))
+	(let loop ((offset 2) (i 0))
+	  (if (= i n)
+	      (begin (postgresql-query-descriptions-set! query vec) query)
+	      (let-values (((next name) (read-string payload offset)))
+		(let ((table-id   (bytevector-u32-ref-be payload next))
+		      (column-num (bytevector-u16-ref-be payload (+ next 4)))
+		      (type-id    (bytevector-u32-ref-be payload (+ next 6)))
+		      (type-size  (bytevector-u16-ref-be payload (+ next 10)))
+		      (type-mod   (bytevector-u32-ref-be payload (+ next 12)))
+		      (fmt-code   (bytevector-u16-ref-be payload (+ next 16))))
+		  (vector-set! vec i (vector name table-id column-num type-id
+					     type-size type-mod fmt-code))
+		  (loop (+ next 18) (+ i 1))))))))
+
+    (define (postgresql-execute-sql! conn sql)
+      (let ((out (postgresql-connection-sock-out conn))
+	    (in  (postgresql-connection-sock-in conn)))
+	(postgresql-send-query-message out sql)
+	;; get 
+	(let loop ((r #t))
+	  (let-values (((code payload) (postgresql-read-response in)))
+	    (case code
+	      ((#\C)           ;; Close
+	       (when (postgresql-query? r)
+		 (postgresql-query-eoq-set! r #t))
+	       (loop r))
+	      ((#\Z) r)        ;; ReadyForQuery
+	      ((#\T)	       ;; RowDescription
+	       ;; TODO should we store records?
+	       (let ((query (make-postgresql-query conn #f)))
+		 (parse-row-description query payload)))
+	      (else (loop r)))))))
+
+    (define (parse-record query payload)
+      (define (read-fix payload offset size)
+	(let ((end (+ offset size)))
+	  (values end (bytevector-copy payload offset end))))
+
+      (define (convert value type)
+	;; i need something...
+	(case type
+	  ;; integer
+	  ((23) (string->number (utf8->string value)))
+	  ;; varchar
+	  ((1043) (utf8->string value))
+	  ;; else (just return for now)
+	  (else value)))
+
+      (let* ((n (bytevector-u16-ref-be payload 0))
+	     (vec (make-vector n #f))
+	     (desc (postgresql-query-descriptions query)))
+	(let loop ((offset 2) (i 0))
+	  (if (= i n)
+	      vec
+	      (let ((size (bytevector-u32-ref-be payload offset))
+		    (type (vector-ref (vector-ref desc i) 3))
+		    (offset (+ offset 4)))
+		;; I hope this is the only negative number
+		;; or should we check if the most significat bit is set?
+		(let-values (((offset value) (read-fix payload offset size)))
+		  (vector-set! vec i (convert value type))
+		  (loop offset (+ i 1))))))))
+
+    (define (postgresql-fetch-query! query)
+      (if (postgresql-query-eoq query)
+	  #f
+	  (let loop ((in (postgresql-connection-sock-in 
+			  (postgresql-query-connection query))))
+	    (let-values (((code payload) (postgresql-read-response in)))
+	      (case code
+		((#\C) (postgresql-query-eoq-set! query #t) (loop in))
+		((#\Z) #f)
+		((#\D) (parse-record query payload))
+		(else 
+		 (error "postgresql-fetch-query!: unexpected code" code)))))))
 
     )
 )

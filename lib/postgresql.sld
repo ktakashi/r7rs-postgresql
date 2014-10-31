@@ -32,6 +32,11 @@
 (define-library (postgresql)
   (import (postgresql apis))
   (export make-postgresql-connection
+	  postgresql-connection?
 	  postgresql-open-connection!
 	  postgresql-login!
-	  postgresql-terminate!))
+	  postgresql-terminate!
+	  postgresql-query?
+	  postgresql-query-descriptions
+	  postgresql-execute-sql!
+	  postgresql-fetch-query!))

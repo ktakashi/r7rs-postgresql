@@ -37,6 +37,8 @@
     (begin
       (define (bytevector-u16-ref-le bv index)
 	  (bytevector-u16-ref bv index (endianness little)))
+      (define (bytevector-u16-ref-be bv index)
+	  (bytevector-u16-ref bv index (endianness big)))
       (define (bytevector-u32-ref-be bv index)
 	(bytevector-u32-ref bv index (endianness big)))
       (define (bytevector->hex-string bv)
@@ -57,6 +59,9 @@
       (define (bytevector-u16-ref-le str i)
 	(+ (bytevector-u8-ref str i)
 	   (arithmetic-shift (bytevector-u8-ref str (+ i 1)) 8)))
+      (define (bytevector-u16-ref-be str i)
+	(+ (arithmetic-shift (bytevector-u8-ref str i) 8)
+	   (bytevector-u8-ref str (+ i 1))))
       (define (bytevector-u32-ref-be str i)
 	(+ (arithmetic-shift (bytevector-u8-ref str i) 24)
 	   (arithmetic-shift (bytevector-u8-ref str (+ i 1)) 16)
@@ -112,5 +117,7 @@
 	     (else
 	      (write-string (integer->hex-string (bytevector-u8-ref bv i)) out)
 	      (lp (+ i 1))))))))))
-  (export bytevector-u16-ref-le bytevector-u32-ref-be bytevector->integer
+  (export bytevector-u16-ref-le bytevector-u16-ref-be 
+	  bytevector-u32-ref-be
+	  bytevector->integer
 	  hex-string->bytevector bytevector->hex-string))

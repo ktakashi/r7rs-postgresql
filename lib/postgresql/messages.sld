@@ -32,6 +32,7 @@
   (export postgresql-send-startup-message
 	  postgresql-send-password-message
 	  postgresql-send-terminate-message
+	  postgresql-send-query-message
 	  postgresql-read-response)
   (import (scheme base) 
 	  (scheme write)
@@ -75,7 +76,8 @@
 	    (send-bytes out (cdar params))
 	    (write-u8 0 out)
 	    (loop (cdr params))))
-	(write-u8 0 out)))
+	(write-u8 0 out)
+	(flush-output-port out)))
     
     ;; it's not specified but all messages except startup
     ;; and ssl request start message type (byte1) and length (int32)
@@ -97,11 +99,20 @@
 	(write-u8 (char->integer #\p) out)
 	(send-s32 out (+ 4 (bytevector-length bv) 1))
 	(send-bytes out bv)
-	(write-u8 0 out)))
+	(write-u8 0 out)
+	(flush-output-port out)))
 
     (define (postgresql-send-terminate-message out)
       (write-u8 (char->integer #\X) out)
       (send-s32 out 4))
+
+    (define (postgresql-send-query-message out sql)
+      (let ((bv (string->utf8 sql)))
+	(write-u8 (char->integer #\Q) out)
+	(send-s32 out (+ 4 (bytevector-length bv) 1))
+	(send-bytes out bv)
+	(write-u8 0 out)
+	(flush-output-port out)))
     )
 
   )
