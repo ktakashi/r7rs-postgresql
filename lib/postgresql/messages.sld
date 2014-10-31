@@ -31,6 +31,7 @@
 (define-library (postgresql messages)
   (export postgresql-send-startup-message
 	  postgresql-send-password-message
+	  postgresql-send-terminate-message
 	  postgresql-read-response)
   (import (scheme base) 
 	  (scheme write)
@@ -97,6 +98,10 @@
 	(send-s32 out (+ 4 (bytevector-length bv) 1))
 	(send-bytes out bv)
 	(write-u8 0 out)))
+
+    (define (postgresql-send-terminate-message out)
+      (write-u8 (char->integer #\X) out)
+      (send-s32 out 4))
     )
 
   )

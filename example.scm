@@ -11,3 +11,6 @@
 
 ;; login
 (postgresql-login! conn)
+
+;; terminate and close connection
+(postgresql-terminate! conn)

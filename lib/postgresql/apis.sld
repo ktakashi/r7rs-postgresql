@@ -31,7 +31,8 @@
 (define-library (postgresql apis)
   (export make-postgresql-connection
 	  postgresql-open-connection!
-	  postgresql-login!)
+	  postgresql-login!
+	  postgresql-terminate!)
   (import (scheme base)
 	  (scheme write)
 	  (scheme char)
@@ -69,6 +70,9 @@
 	(postgresql-connection-sock-in-set! conn (socket-input-port s))
 	(postgresql-connection-sock-out-set! conn (socket-output-port s))
 	conn))
+
+    (define (close-conn conn)
+      (socket-close (postgresql-connection-socket conn)))
 
     (define (postgresql-login! conn)
       (define (store-params params)
@@ -149,6 +153,11 @@
 	      (else 
 	       (close-conn conn)
 	       (error "postgresql-login!: unsupported login method")))))))
+
+    (define (postgresql-terminate! conn)
+      (let ((out (postgresql-connection-sock-out conn)))
+	(postgresql-send-terminate-message out)
+	(close-conn conn)))
 
     )
 )
