@@ -31,7 +31,7 @@
 (define-library (postgresql apis)
   (export make-postgresql-connection
 	  postgresql-open-connection!
-	  postgresql-login)
+	  postgresql-login!)
   (import (scheme base)
 	  (scheme write)
 	  (scheme char)
@@ -54,7 +54,10 @@
       (sock-in  postgresql-connection-sock-in
 		postgresql-connection-sock-in-set!)
       (sock-out postgresql-connection-sock-out 
-		postgresql-connection-sock-out-set!))
+		postgresql-connection-sock-out-set!)
+      (params   postgresql-connection-params postgresql-connection-params-set!)
+      (id       postgresql-connection-id postgresql-connection-id-set!)
+      (key      postgresql-connection-key postgresql-connection-key-set!))
     
     (define (make-postgresql-connection host port database user pass)
       (%make-postgresql-connection host port database user pass))
@@ -67,7 +70,47 @@
 	(postgresql-connection-sock-out-set! conn (socket-output-port s))
 	conn))
 
-    (define (postgresql-login conn)
+    (define (postgresql-login! conn)
+      (define (store-params params)
+	(define len (bytevector-length params))
+	(define (read-string params i)
+	  (let ((out (open-output-string)))
+	    (let loop ((i i))
+	      (let ((b (bytevector-u8-ref params i)))
+		(if (zero? b)
+		    (values (+ i 1) (get-output-string out))
+		    (begin
+		      (write-char (integer->char b) out)
+		      (loop (+ i 1))))))))
+	;; convert it to alist ((name . value)) 
+	;; name is symbol, value is string
+	(let loop ((i 0) (r '()))
+	  (let*-values (((next name) (read-string params i))
+			((next value) (read-string params next)))
+	    (if (= len next)
+		(postgresql-connection-params-set! conn r)
+		(loop next (cons (cons (string->symbol name) value) r))))))
+      (define (next in)
+	(let-values (((code payload) (postgresql-read-response in)))
+	  (case code
+	    ((#\K)
+	     (let ((id (bytevector-u32-ref-be payload 0))
+		   (key (bytevector-u32-ref-be payload 4)))
+	       (postgresql-connection-id-set! conn id)
+	       (postgresql-connection-key-set! conn key)
+	       (next in)))
+	    ((#\S) 
+	     (store-params payload)
+	     (next in))
+	    ((#\N)
+	     (let ((code (bytevector-u8-ref payload 0)))
+	       ;; TODO how should we treat this?
+	       (unless (zero? code)
+		 (write-string (utf8->string payload 1) (current-error-port))
+		 (newline (current-error-port)))
+	       (next in)))
+	    ((#\Z) #t))))
+
       (let ((in   (postgresql-connection-sock-in conn))
 	    (out  (postgresql-connection-sock-out conn))
 	    (user (postgresql-connection-username conn))
@@ -89,23 +132,23 @@
 	      (string-append "md5" pus5)))
 	  (define (send-password conn payload)
 	    (unless first
-	      (error "postgresql-login: failed to login"))
+	      (error "postgresql-login!: failed to login"))
 	    (if (= (bytevector-length payload) 4)
 		(postgresql-send-password-message out pass)
 		(postgresql-send-password-message out (construct payload))))
 	  (let-values (((code payload) (postgresql-read-response in)))
 	    (unless (char=? code #\R)
 	      (close-conn conn)
-	      (error "postgresql-login: server respond unexpected message"
+	      (error "postgresql-login!: server respond unexpected message"
 		     code))
 	    ;; get content
 	    (case (bytevector-u32-ref-be payload 0)
-	      ((0) #t) ;; ok
+	      ((0) (next in)) ;; ok
 	      ((3) (send-password conn payload) (loop #f))
 	      ((5) (send-password conn payload) (loop #f))
 	      (else 
 	       (close-conn conn)
-	       (error "postgresql-login: unsupported login method")))))))
+	       (error "postgresql-login!: unsupported login method")))))))
 
     )
 )

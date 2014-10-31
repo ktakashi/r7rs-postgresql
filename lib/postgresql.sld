@@ -33,4 +33,4 @@
   (import (postgresql apis))
   (export make-postgresql-connection
 	  postgresql-open-connection!
-	  postgresql-login))
+	  postgresql-login!))

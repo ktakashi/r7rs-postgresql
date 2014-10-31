@@ -10,4 +10,4 @@
 (postgresql-open-connection! conn)
 
 ;; login
-(postgresql-login conn)
+(postgresql-login! conn)
