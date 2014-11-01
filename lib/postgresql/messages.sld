@@ -32,7 +32,14 @@
   (export postgresql-send-startup-message
 	  postgresql-send-password-message
 	  postgresql-send-terminate-message
+	  postgresql-send-sync-message
+	  postgresql-send-flush-message
 	  postgresql-send-query-message
+	  postgresql-send-parse-message
+	  postgresql-send-bind-message
+	  postgresql-send-describe-message
+	  postgresql-send-execute-message
+	  postgresql-send-close-message
 	  postgresql-read-response)
   (import (scheme base) 
 	  (scheme write)
@@ -41,6 +48,7 @@
 	  (misc io))
   (begin
     (define (send-s32 out v) (write-u32-be v out))
+    (define (send-s16 out v) (write-u16-be v out))
     (define (send-string out s)
       (write-bytevector (string->utf8 s) out)
       ;; null terminate
@@ -125,12 +133,120 @@
 
     (define (postgresql-send-terminate-message out)
       (write-u8 (char->integer #\X) out)
-      (send-s32 out 4))
+      (send-s32 out 4)
+      (flush-output-port out))
+
+    (define (postgresql-send-sync-message out)
+      (write-u8 (char->integer #\S) out)
+      (send-s32 out 4)
+      (flush-output-port out))
+
+    (define (postgresql-send-flush-message out)
+      (write-u8 (char->integer #\H) out)
+      (send-s32 out 4)
+      (flush-output-port out))
 
     (define (postgresql-send-query-message out sql)
       (let ((bv (string->utf8 sql)))
 	(write-u8 (char->integer #\Q) out)
 	(send-s32 out (+ 4 (bytevector-length bv) 1))
+	(send-bytes out bv)
+	(write-u8 0 out)
+	(flush-output-port out)))
+
+    (define (postgresql-send-describe-message out name type)
+      (let ((bv (string->utf8 name)))
+	(write-u8 (char->integer #\D) out)
+	(send-s32 out (+ 4 1 (bytevector-length bv) 1))
+	(write-u8 (char->integer type) out)
+	(send-bytes out bv)
+	(write-u8 0 out)
+	(flush-output-port out)))
+
+    ;; prepared statement
+    ;; TYPES must be a list. (type ...)
+    ;; For now we don't suppor this so must always be '()
+    (define (postgresql-send-parse-message out name sql types)
+      (let ((sqlb (string->utf8 sql))
+	    (nameb (if name (string->utf8 name) #u8(0)))
+	    (typelen (length types)))
+	(write-u8 (char->integer #\P) out)
+	(send-s32 out (+ 4
+			 (bytevector-length nameb) 1
+			 (bytevector-length sqlb) 1
+			 2 (* typelen 4)))
+	(send-bytes out nameb)
+	(write-u8 0 out)
+	(send-bytes out sqlb)
+	(write-u8 0 out)
+	(send-s16 out typelen)
+	(for-each (lambda (type) (send-s32 out type)) types)
+	(flush-output-port out))
+      )
+
+    (define (postgresql-send-bind-message out portal prepared params formats)
+      (define (->bytevector v) 
+	(cond ((string? v) (string->utf8 v))
+	      ((number? v) (string->utf8 (number->string v)))
+	      ((bytevector? v) v)
+	      (else 
+	       (error "postgresql-send-bind-message: unsupported type" v))))
+      ;; i think these must be one or the other but
+      ;; document doesn't say it and we don't use portal.
+      ;; so for now no check.
+      (let ((portal (if portal (string->utf8 portal) #u8()))
+	    (prepared (if prepared (string->utf8 prepared) #u8()))
+	    (param-len (length params))
+	    (formats-len 0 #;(length formats))
+	    (params (map ->bytevector params)))
+	(write-u8 (char->integer #\B) out)
+	;; we use text ...
+	(send-s32 out (+ 4 
+			 (bytevector-length portal) 1
+			 (bytevector-length prepared) 1
+			 2 ;; parameter format codes
+			 (* 2 param-len)
+			 2 ;; parameter counts
+			 (let loop ((r 0) (params params))
+			   (if (null? params)
+			       r
+			       (loop (+ 4 (bytevector-length (car params)) r)
+				     (cdr params))))
+			 2 ;; result column format
+			 ))
+	(send-bytes out portal)
+	(write-u8 0 out)
+	(send-bytes out prepared)
+	(write-u8 0 out)
+	(send-s16 out param-len) ;; all text for now
+	(let loop ((i 0))
+	  (unless (= i param-len)
+	    (send-s16 out 1)
+	    (loop (+ i 1))))
+	(send-s16 out param-len)
+	(for-each (lambda (param)
+		    (send-s32 out (bytevector-length param))
+		    (send-bytes out param)
+		    ;;(write-u8 0 out)
+		    )
+		  params)
+	(send-s16 out formats-len)
+	(flush-output-port out)))
+	
+    (define (postgresql-send-execute-message out name maxnum)
+      (let ((bv (string->utf8 name)))
+	(write-u8 (char->integer #\E) out)
+	(send-s32 out (+ 4 (bytevector-length bv) 1 4))
+	(send-bytes out bv)
+	(write-u8 0 out)
+	(send-s32 out maxnum)
+	(flush-output-port out)))
+
+    (define (postgresql-send-close-message out type name)
+      (let ((bv (string->utf8 name)))
+	(write-u8 (char->integer #\C) out)
+	(send-s32 out (+ 4 1 (bytevector-length bv) 1))
+	(write-u8 (char->integer type) out)
 	(send-bytes out bv)
 	(write-u8 0 out)
 	(flush-output-port out)))

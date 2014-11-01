@@ -39,4 +39,12 @@
 	  postgresql-query?
 	  postgresql-query-descriptions
 	  postgresql-execute-sql!
-	  postgresql-fetch-query!))
+	  postgresql-prepared-statement?
+	  postgresql-prepared-statement
+	  postgresql-prepared-statement-sql
+	  postgresql-bind-parameters!
+	  postgresql-execute!
+	  postgresql-close-prepared-statement!
+	  postgresql-fetch-query!
+	  
+	  *postgresql-maximum-results*))

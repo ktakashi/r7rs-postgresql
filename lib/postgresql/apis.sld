@@ -39,6 +39,18 @@
 	  postgresql-query?
 	  postgresql-query-descriptions
 	  postgresql-execute-sql!
+
+	  ;; prepared statement
+	  postgresql-prepared-statement?
+	  postgresql-prepared-statement
+	  postgresql-prepared-statement-sql ;; for observation
+	  postgresql-bind-parameters!
+	  postgresql-execute!
+	  postgresql-close-prepared-statement!
+
+	  ;; configuration parameter
+	  *postgresql-maximum-results*
+
 	  postgresql-fetch-query!
 	  )
   (import (scheme base)
@@ -49,6 +61,9 @@
 	  (misc socket)
 	  (misc bytevectors))
   (begin
+    ;; default 50
+    (define *postgresql-maximum-results* (make-parameter 50))
+
     (define-record-type postgresql-connection 
       (make-postgresql-connection host port database username password)
       postgresql-connection?
@@ -66,7 +81,18 @@
 		postgresql-connection-sock-out-set!)
       (params   postgresql-connection-params postgresql-connection-params-set!)
       (id       postgresql-connection-id postgresql-connection-id-set!)
-      (key      postgresql-connection-key postgresql-connection-key-set!))
+      (key      postgresql-connection-key postgresql-connection-key-set!)
+      (counter  postgresql-connection-counter
+		postgresql-connection-counter-set!))
+
+    ;; gensym would be easier but not portable...
+    (define (generate-unique-string conn)
+      (let ((counter (postgresql-connection-counter conn)))
+	(postgresql-connection-counter-set! conn (+ counter 1))
+	(string-append (postgresql-connection-username conn)
+		       (number->string (postgresql-connection-id conn))
+		       (number->string counter))))
+		     
 
     (define (postgresql-open-connection! conn)
       (let ((s (make-client-socket (postgresql-connection-host conn)
@@ -74,6 +100,7 @@
 	(postgresql-connection-socket-set! conn s)
 	(postgresql-connection-sock-in-set! conn (socket-input-port s))
 	(postgresql-connection-sock-out-set! conn (socket-output-port s))
+	(postgresql-connection-counter-set! conn 0)
 	conn))
 
     (define (close-conn conn)
@@ -168,11 +195,13 @@
 	(close-conn conn)))
 
     (define-record-type postgresql-query
-      (make-postgresql-query connection eoq)
+      (make-postgresql-query connection buffer cursor eoq)
       postgresql-query?
-      (connection postgresql-query-connection)
+      (connection   postgresql-query-connection)
       (descriptions postgresql-query-descriptions 
 		    postgresql-query-descriptions-set!)
+      (buffer       postgresql-query-buffer postgresql-query-buffer-set!)
+      (cursor       postgresql-query-cursor postgresql-query-cursor-set!)
       ;; end of query
       (eoq          postgresql-query-eoq 
 		    postgresql-query-eoq-set!))
@@ -180,13 +209,13 @@
     ;; parse description to a vector
     ;; a description:
     ;;  #(name table-id column-num type-id type-size type-modifier format-code)
-    (define (parse-row-description query payload)
+    (define (parse-row-description payload k)
       (define read-string read-null-terminated-string)
       (let* ((n (bytevector-u16-ref-be payload 0))
 	     (vec (make-vector n #f)))
 	(let loop ((offset 2) (i 0))
 	  (if (= i n)
-	      (begin (postgresql-query-descriptions-set! query vec) query)
+	      (k vec)
 	      (let-values (((next name) (read-string payload offset)))
 		(let ((table-id   (bytevector-u32-ref-be payload next))
 		      (column-num (bytevector-u16-ref-be payload (+ next 4)))
@@ -198,24 +227,141 @@
 					     type-size type-mod fmt-code))
 		  (loop (+ next 18) (+ i 1))))))))
 
+    ;; this is very inefficient one, do not use for
+    ;; big query like more than 10000 or so
     (define (postgresql-execute-sql! conn sql)
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn)))
 	(postgresql-send-query-message out sql)
 	;; get 
-	(let loop ((r #t))
+	(let loop ((r #t) (rows '()))
 	  (let-values (((code payload) (postgresql-read-response in)))
 	    (case code
 	      ((#\C)           ;; Close
+	       (cond ((postgresql-query? r)
+		      (postgresql-query-eoq-set! r #t)
+		      (loop r rows))
+		     (else
+		      ;; create query
+		      (loop (make-postgresql-query conn #f #f #t) rows))))
+	      ((#\Z)           ;; ReadyForQuery
 	       (when (postgresql-query? r)
-		 (postgresql-query-eoq-set! r #t))
-	       (loop r))
-	      ((#\Z) r)        ;; ReadyForQuery
+		 (postgresql-query-buffer-set! r (list->vector (reverse rows)))
+		 (postgresql-query-cursor-set! r 0))
+	       r)
 	      ((#\T)	       ;; RowDescription
 	       ;; TODO should we store records?
-	       (let ((query (make-postgresql-query conn #f)))
-		 (parse-row-description query payload)))
-	      (else (loop r)))))))
+	       (let ((query (make-postgresql-query conn #f #f #f)))
+		 (loop (parse-row-description payload
+			(lambda (vec)
+			  (postgresql-query-descriptions-set! query vec)
+			  query)) rows)))
+	      ((#\D)
+	       (let ((rows (if (postgresql-query? r)
+			       (cons (parse-record r payload) rows)
+			       rows)))
+		 (loop r rows)))
+	      (else (loop r rows)))))))
+
+    (define-record-type postgresql-statement
+      (make-postgresql-prepared-statement connection sql name)
+      postgresql-prepared-statement?
+      (connection postgresql-prepared-statement-connection)
+      (sql        postgresql-prepared-statement-sql)
+      (name       postgresql-prepared-statement-name
+		  postgresql-prepared-statement-name-set!)
+      (parameters postgresql-prepared-statement-parameters
+		  postgresql-prepared-statement-parameters-set!)
+      (descriptions postgresql-prepared-statement-descriptions
+		    postgresql-prepared-statement-descriptions-set!))
+
+    (define (prepared-statement prepared)
+      (define conn (postgresql-prepared-statement-connection prepared))
+      (let ((out (postgresql-connection-sock-out conn))
+	    (in  (postgresql-connection-sock-in conn))
+	    (sql (postgresql-prepared-statement-sql prepared))
+	    (name (generate-unique-string conn)))
+	(postgresql-send-parse-message out name sql '())
+	(postgresql-prepared-statement-name-set! prepared name)
+	;; get description
+	(postgresql-send-describe-message out name #\S)
+	;; now flush
+	(postgresql-send-flush-message out)
+	;; handle responses
+	(let-values (((code payload) (postgresql-read-response in)))
+	  (unless (char=? code #\1)
+	    (error "postgresql-prepared-statement: prepared statement" sql)))
+	(let-values (((code payload) (postgresql-read-response in)))
+	  (unless (char=? code #\t)
+	    (error "postgresql-prepared-statement: parameter description" 
+		   code)))
+	(let-values (((code payload) (postgresql-read-response in)))
+	  (cond ((char=? code #\T)
+		 (parse-row-description 
+		  payload 
+		  (lambda (vec)
+		    (postgresql-prepared-statement-descriptions-set!
+		     prepared vec)
+		    prepared)))
+		((char=? code #\n) prepared) ;; NoData
+		(else
+		 (error 
+		  "postgresql-prepared-statement: failed to get description"
+		  code))))))
+
+    ;; for god sake....
+    (define (postgresql-prepared-statement conn sql)
+      (make-postgresql-prepared-statement conn sql #f))
+
+    (define (postgresql-bind-parameters! prepared . params)
+      (postgresql-prepared-statement-parameters-set! prepared params)
+      prepared)
+
+    (define (postgresql-execute! prepared)
+      (define conn (postgresql-prepared-statement-connection prepared))
+      (define (check prepared)
+	(and (not (postgresql-prepared-statement-name prepared))
+	     (prepared-statement prepared)))
+      ;; need to be checked
+      (check prepared)
+      (let ((out (postgresql-connection-sock-out conn))
+	    (in  (postgresql-connection-sock-in conn))
+	    (name (postgresql-prepared-statement-name prepared))
+	    (params (postgresql-prepared-statement-parameters prepared))
+	    (maxnum (*postgresql-maximum-results*)))
+	;; do everything in one go here 
+	;; to create the same portal if needed
+	(postgresql-send-bind-message out name name params '())
+	(postgresql-send-execute-message out name maxnum)
+	(postgresql-send-flush-message out)
+	;; handle response
+	(let-values (((code payload) (postgresql-read-response in)))
+	  ;; BindComplete(#\2)
+	  (unless (char=? code #\2)
+	    (error "postgresql-execute! failed to execute" code)))
+	;; store it in the buffer
+	(let ((q (make-postgresql-query conn (make-vector maxnum) 0 #f)))
+	  (postgresql-query-descriptions-set! q
+	   (postgresql-prepared-statement-descriptions prepared))
+	  (fill-buffer q))))
+
+    (define (postgresql-close-prepared-statement! prepared)
+      (define conn (postgresql-prepared-statement-connection prepared))
+      (let ((out (postgresql-connection-sock-out conn))
+	    (in  (postgresql-connection-sock-in conn))
+	    (name (postgresql-prepared-statement-name prepared)))
+	(postgresql-send-close-message out #\S name)
+	;; do we need this?
+	(postgresql-send-close-message out #\P name)
+	(postgresql-send-flush-message out)
+	(let-values (((code payload) (postgresql-read-response in)))
+	  (unless (char=? code #\3)
+	    (error "postgresql-close-prepared-statement! failed to close"
+		   code prepared)))
+	(let-values (((code payload) (postgresql-read-response in)))
+	  (unless (char=? code #\3)
+	    (error "postgresql-close-prepared-statement! failed to close"
+		   code prepared)))))
 
     (define (parse-record query payload)
       (define (read-fix payload offset size)
@@ -247,18 +393,38 @@
 		  (vector-set! vec i (convert value type))
 		  (loop offset (+ i 1))))))))
 
-    (define (postgresql-fetch-query! query)
-      (if (postgresql-query-eoq query)
-	  #f
-	  (let loop ((in (postgresql-connection-sock-in 
-			  (postgresql-query-connection query))))
+    (define (fill-buffer query)
+      (define conn (postgresql-query-connection query))
+      (define in   (postgresql-connection-sock-in conn))
+      (define buffer (postgresql-query-buffer query))
+      (define len (vector-length buffer))
+      ;; init cursor
+      (postgresql-query-cursor-set! query 0)
+      (let loop ((i 0))
+	(if (= i len)
+	    query
 	    (let-values (((code payload) (postgresql-read-response in)))
 	      (case code
-		((#\C) (postgresql-query-eoq-set! query #t) (loop in))
-		((#\Z) #f)
-		((#\D) (parse-record query payload))
+		((#\C) 
+		 ;; ok shrink the buffer
+		 (postgresql-query-eoq-set! query #t)
+		 (postgresql-query-buffer-set! query (vector-copy buffer 0 i))
+		 query)
+		((#\Z) query)
+		((#\D) 
+		 (vector-set! buffer i (parse-record query payload))
+		 (loop (+ i 1)))
 		(else 
 		 (error "postgresql-fetch-query!: unexpected code" code)))))))
+
+    (define (postgresql-fetch-query! query)
+      (define buffer (postgresql-query-buffer query))
+      (define cursor (postgresql-query-cursor query))
+      (cond ((< cursor (vector-length buffer))
+	     (postgresql-query-cursor-set! query (+ cursor 1))
+	     (vector-ref buffer cursor))
+	    ((postgresql-query-eoq query) #f)
+	    (else (postgresql-fetch-query! (fill-buffer query)))))
 
     )
 )
