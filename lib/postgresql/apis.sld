@@ -93,8 +93,10 @@
 		       (number->string (postgresql-connection-id conn))
 		       (number->string counter))))
 		     
-
     (define (postgresql-open-connection! conn)
+      ;; TODO check if connection is already open.
+      ;;  - should we re-open? or keep it?
+      ;;  - probably re-open is safer since we don't have 'select'
       (let ((s (make-client-socket (postgresql-connection-host conn)
 				   (postgresql-connection-port conn))))
 	(postgresql-connection-socket-set! conn s)
@@ -272,11 +274,22 @@
 		  postgresql-prepared-statement-name-set!)
       (parameters postgresql-prepared-statement-parameters
 		  postgresql-prepared-statement-parameters-set!)
+      ;; object id of the parameter data type
+      (oids       postgresql-prepared-statement-oids
+		  postgresql-prepared-statement-oids-set!)
+      ;; column descriptions
       (descriptions postgresql-prepared-statement-descriptions
 		    postgresql-prepared-statement-descriptions-set!))
 
-    (define (prepared-statement prepared)
+    (define (init-prepared-statement prepared)
       (define conn (postgresql-prepared-statement-connection prepared))
+      (define (parse-oids payload)
+	(let ((n (bytevector-u16-ref-be payload 0)))
+	  (let loop ((offset 2) (r '()) (i 0))
+	    (if (= i n)
+		(reverse r) ;; keep it as a list for convenience.
+		(let ((oid (bytevector-u32-ref-be payload offset)))
+		  (loop (+ offset 4) (cons oid r) (+ i 1)))))))
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (sql (postgresql-prepared-statement-sql prepared))
@@ -294,7 +307,9 @@
 	(let-values (((code payload) (postgresql-read-response in)))
 	  (unless (char=? code #\t)
 	    (error "postgresql-prepared-statement: parameter description" 
-		   code)))
+		   code))
+	  (postgresql-prepared-statement-oids-set! prepared 
+						   (parse-oids payload)))
 	(let-values (((code payload) (postgresql-read-response in)))
 	  (cond ((char=? code #\T)
 		 (parse-row-description 
@@ -321,7 +336,7 @@
       (define conn (postgresql-prepared-statement-connection prepared))
       (define (check prepared)
 	(and (not (postgresql-prepared-statement-name prepared))
-	     (prepared-statement prepared)))
+	     (init-prepared-statement prepared)))
       ;; need to be checked
       (check prepared)
       (let ((out (postgresql-connection-sock-out conn))

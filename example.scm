@@ -18,9 +18,8 @@
 (postgresql-login! conn)
 
 (print "create tables")
-;; may not be there yet
-(guard (e (else #t))
-  (postgresql-execute-sql! conn "drop table test"))
+;; may not be there yet (causes an error if there isn't)
+;; (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
 (postgresql-execute-sql! conn
   "create table test (id integer, name varchar(50))")
 (postgresql-terminate! conn)
@@ -41,16 +40,13 @@
   "insert into test (id, name) values (-1, 'test name2')")
 (postgresql-execute-sql! conn  "commit")
 
-;;(print "insert with prepared statement")
-#;
+(print "insert with prepared statement")
 (let ((p (postgresql-prepared-statement 
 	  conn "insert into test (id, name) values ($1, $2)")))
   (print (postgresql-prepared-statement-sql p))
   (print (postgresql-bind-parameters! p 3 "name"))
   (let ((q (postgresql-execute! p)))
-    (print q)
-    (print (postgresql-fetch-query! q))
-    (print (postgresql-fetch-query! q)))
+    (print q))
   (postgresql-close-prepared-statement! p))
 
 (let ((r (postgresql-execute-sql! conn "select * from test")))
@@ -64,6 +60,16 @@
 	  conn "select * from test where name = $1")))
   (print (postgresql-prepared-statement-sql p))
   (print (postgresql-bind-parameters! p "name"))
+  (let ((q (postgresql-execute! p)))
+    (print q)
+    (print (postgresql-fetch-query! q))
+    (print (postgresql-fetch-query! q)))
+  (postgresql-close-prepared-statement! p))
+
+(let ((p (postgresql-prepared-statement 
+	  conn "select * from test where id = $1")))
+  (print (postgresql-prepared-statement-sql p))
+  (print (postgresql-bind-parameters! p 1))
   (let ((q (postgresql-execute! p)))
     (print q)
     (print (postgresql-fetch-query! q))

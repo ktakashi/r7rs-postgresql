@@ -221,7 +221,7 @@
 	(send-s16 out param-len) ;; all text for now
 	(let loop ((i 0))
 	  (unless (= i param-len)
-	    (send-s16 out 1)
+	    (send-s16 out 0)
 	    (loop (+ i 1))))
 	(send-s16 out param-len)
 	(for-each (lambda (param)
