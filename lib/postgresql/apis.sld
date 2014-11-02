@@ -197,16 +197,16 @@
 	(close-conn conn)))
 
     (define-record-type postgresql-query
-      (make-postgresql-query connection buffer cursor eoq)
+      (make-postgresql-query connection buffer cursor statement eoq)
       postgresql-query?
       (connection   postgresql-query-connection)
       (descriptions postgresql-query-descriptions 
 		    postgresql-query-descriptions-set!)
       (buffer       postgresql-query-buffer postgresql-query-buffer-set!)
       (cursor       postgresql-query-cursor postgresql-query-cursor-set!)
+      (statement    postgresql-query-statement)
       ;; end of query
-      (eoq          postgresql-query-eoq 
-		    postgresql-query-eoq-set!))
+      (eoq          postgresql-query-eoq postgresql-query-eoq-set!))
 
     ;; parse description to a vector
     ;; a description:
@@ -245,7 +245,7 @@
 		      (loop r rows))
 		     (else
 		      ;; create query
-		      (loop (make-postgresql-query conn #f #f #t) rows))))
+		      (loop (make-postgresql-query conn #f #f #f #t) rows))))
 	      ((#\Z)           ;; ReadyForQuery
 	       (when (postgresql-query? r)
 		 (postgresql-query-buffer-set! r (list->vector (reverse rows)))
@@ -253,7 +253,7 @@
 	       r)
 	      ((#\T)	       ;; RowDescription
 	       ;; TODO should we store records?
-	       (let ((query (make-postgresql-query conn #f #f #f)))
+	       (let ((query (make-postgresql-query conn #f #f #f #f)))
 		 (loop (parse-row-description payload
 			(lambda (vec)
 			  (postgresql-query-descriptions-set! query vec)
@@ -361,7 +361,7 @@
 	(postgresql-prepared-statement-parameters-set! prepared params)
 	prepared))
 
-    (define (postgresql-execute! prepared)
+    (define (do-execute! prepared query)
       (define conn (postgresql-prepared-statement-connection prepared))
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
@@ -371,10 +371,16 @@
 	(postgresql-send-execute-message out name maxnum)
 	(postgresql-send-flush-message out)
 	;; store it in the buffer
-	(let ((q (make-postgresql-query conn (make-vector maxnum) 0 #f)))
-	  (postgresql-query-descriptions-set! q
+	(fill-buffer query)))
+
+    (define (postgresql-execute! prepared)
+      (define conn (postgresql-prepared-statement-connection prepared))
+      (define maxnum (*postgresql-maximum-results*))
+      (let ((q (make-postgresql-query conn (make-vector maxnum) 0
+				      prepared #f)))
+	(postgresql-query-descriptions-set! q
 	   (postgresql-prepared-statement-descriptions prepared))
-	  (fill-buffer q))))
+	  (do-execute! prepared q)))
 
     (define (postgresql-close-prepared-statement! prepared)
       (define conn (postgresql-prepared-statement-connection prepared))
@@ -434,7 +440,12 @@
       (postgresql-query-cursor-set! query 0)
       (let loop ((i 0))
 	(if (= i len)
-	    query
+	    ;; receive portal suspended or command complete
+	    (let-values (((code payload) (postgresql-read-response in)))
+	      (case code
+		((#\s #\C) query)
+		(else 
+		 (error "postgresql-fetch-query!: unexpected code" code))))
 	    (let-values (((code payload) (postgresql-read-response in)))
 	      (case code
 		((#\C) 
@@ -456,7 +467,12 @@
 	     (postgresql-query-cursor-set! query (+ cursor 1))
 	     (vector-ref buffer cursor))
 	    ((postgresql-query-eoq query) #f)
-	    (else (postgresql-fetch-query! (fill-buffer query)))))
+	    (else 
+	     ;; first call execute again
+	     ;; this path must only be prepared statement query
+	     ;; thus query must have statement.
+	     (do-execute! (postgresql-query-statement query) query)
+	     (postgresql-fetch-query! query))))
 
     )
 )

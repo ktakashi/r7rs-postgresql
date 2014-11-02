@@ -19,7 +19,7 @@
 
 (print "create tables")
 ;; may not be there yet (causes an error if there isn't)
-(guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
+;; (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
 (postgresql-execute-sql! conn
   "create table test (id integer, name varchar(50))")
 (postgresql-terminate! conn)
@@ -76,6 +76,9 @@
     (print (postgresql-fetch-query! q)))
   (postgresql-close-prepared-statement! p))
 
+(postgresql-execute-sql! conn "delete from test")
+(postgresql-execute-sql! conn "commit")
+
 ;; max column test
 (let ((p (postgresql-prepared-statement 
 	  conn "insert into test (id, name) values ($1, 'name')")))
@@ -84,6 +87,26 @@
       (postgresql-bind-parameters! p i)
       (postgresql-execute! p)
     (loop (+ i 1))))
+  (postgresql-close-prepared-statement! p))
+
+(let ((p (postgresql-prepared-statement 
+	  conn "select * from test where name = $1")))
+  (print (postgresql-prepared-statement-sql p))
+  (print (postgresql-bind-parameters! p "name"))
+  (let ((q (postgresql-execute! p)))
+    ;; skip first 50
+    (print "skip 50")
+    (do ((i 0 (+ i 1)))
+	((= i 50))
+      (postgresql-fetch-query! q))
+    ;; 51
+    (print "get 51st")
+    (print (postgresql-fetch-query! q))
+    ;; skip next 50
+    (do ((i 0 (+ i 1)))
+	((= i 50))
+      (postgresql-fetch-query! q))
+    (print (postgresql-fetch-query! q)))
   (postgresql-close-prepared-statement! p))
 
 (postgresql-execute-sql! conn "drop table test")
