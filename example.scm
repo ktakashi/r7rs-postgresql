@@ -112,6 +112,12 @@
     (print (postgresql-fetch-query! q)))
   (postgresql-close-prepared-statement! p))
 
+(let ((q (postgresql-execute-sql! conn "select * from test")))
+  (do ((i 0 (+ i 1)))
+      ((= i 60))
+    (postgresql-fetch-query! q))
+  (print (postgresql-fetch-query! q)))
+
 (postgresql-execute-sql! conn "drop table test")
 
 (print "droping non existing table")

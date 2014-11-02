@@ -18,7 +18,7 @@ This library should be portable for R7RS if the implementation supports
 the following SRFIs;
 
 - SRFI-106
-- SRFI-60/SRFI-33
+- SRFI-60/SRFI-33 or R6RS library `(rnrs)`
 
 
 High level APIs
@@ -57,6 +57,34 @@ Procedure: `(postgresql-terminate! conn)`
 Terminates the session and disconnects connection.
 
 
+Procedure: `(postgresql-prepared-statement? obj)`
+
+Return `#t` if _obj_ is a PostgreSQL prepared statement.
+
+
+Procedure: `(postgresql-prepared-statement conn sql)`
+
+Creates a prepared statement object.
+
+
+Procedure: `(postgresql-close-prepared-statement! prepared-statement)`
+
+Closes prepared statement.
+
+
+Procedure: `(postgresql-bind-parameters! prepared-statement . params)`
+
+Binds parameter _params_ to given _prepared-statement_.
+
+
+Procedure: `(postgresql-execute! prepared-statement)`
+
+Executes the given _prepared-statement_ and returns either PostgreSQL
+query object for SELECT statement or affected row count.
+
+To retrieve the result, use `postgresql-fetch-query!` procedure.
+
+
 Procedure: `(postgresql-query? obj)`
 
 Returns `#t` if _obj_ is a PostgreSQL query object.
@@ -76,6 +104,12 @@ Procedure: `(postgresql-fetch-query! query)`
 Fetch a row as a vector. If no more data are available, then returns `#f`.
 
 
+Parameter: `*postgresql-maximum-results*`
+
+Configureation parameter for how many result it should fetch. Default
+value is 50.
+
+
 Low level APIs
 --------------
 
@@ -87,6 +121,6 @@ TODO
 
 - Data conversion is not done properly
   - need some document but couldn't find it...
-- Prepared statement
-- Maybe buffering
-  - currently it can't execute second query unless it fetches all records.
+- ~~Prepared statement~~
+- ~~Maybe buffering~~
+  - ~~currently it can't execute second query unless it fetches all records.~~
