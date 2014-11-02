@@ -20,8 +20,9 @@
 (print "create tables")
 ;; may not be there yet (causes an error if there isn't)
 ;; (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
-(postgresql-execute-sql! conn
-  "create table test (id integer, name varchar(50))")
+(guard (e (else (print (error-object-message e))))
+  (postgresql-execute-sql! conn
+    "create table test (id integer, name varchar(50))"))
 (postgresql-terminate! conn)
 
 (postgresql-open-connection! conn)
@@ -76,7 +77,9 @@
     (print (postgresql-fetch-query! q)))
   (postgresql-close-prepared-statement! p))
 
-(postgresql-execute-sql! conn "delete from test")
+;; delete
+(print "delete")
+(print (postgresql-execute-sql! conn "delete from test"))
 (postgresql-execute-sql! conn "commit")
 
 ;; max column test

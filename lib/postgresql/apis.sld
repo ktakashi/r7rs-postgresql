@@ -239,13 +239,13 @@
 	(let loop ((r #t) (rows '()))
 	  (let-values (((code payload) (postgresql-read-response in)))
 	    (case code
-	      ((#\C)           ;; Close
+	      ((#\C)           ;; CommandComplete
 	       (cond ((postgresql-query? r)
 		      (postgresql-query-eoq-set! r #t)
 		      (loop r rows))
 		     (else
 		      ;; create query
-		      (loop (make-postgresql-query conn #f #f #f #t) rows))))
+		      (loop (parse-command-complete payload) rows))))
 	      ((#\Z)           ;; ReadyForQuery
 	       (when (postgresql-query? r)
 		 (postgresql-query-buffer-set! r (list->vector (reverse rows)))
@@ -361,8 +361,35 @@
 	(postgresql-prepared-statement-parameters-set! prepared params)
 	prepared))
 
+    ;; CommandComplete tag (not needed...)
+#|
+    (define insert-tag (string->utf8 "INSERT"))
+    (define delete-tag (string->utf8 "DELETE"))
+    (define update-tag (string->utf8 "UPDATE"))
+    (define select-tag (string->utf8 "SELECT"))
+    (define create-table-as-tag (string->utf8 "CREATE TABLE AS"))
+    (define move-tag (string->utf8 "MOVE"))
+    (define fetch-tag (string->utf8 "FETCH"))
+    (define copy-tag (string->utf8 "COPY"))
+|#
+
+    (define (parse-command-complete payload)
+      ;; it's a bit awkward but anyway
+      (define (find-start name)
+	(let loop ((index (- (string-length name) 1)))
+	  (cond ((< index 0) #f)
+		((char=? (string-ref name index) #\space) (+ index 1))
+		(else (loop (- index 1))))))
+      (let* ((name (utf8->string payload))
+	     (start (find-start name)))
+	(or (and start
+		 (string->number (string-copy name start 
+					      (- (string-length name) 1))))
+	    -1)))
+
     (define (do-execute! prepared query)
       (define conn (postgresql-prepared-statement-connection prepared))
+
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (name (postgresql-prepared-statement-name prepared))
@@ -371,16 +398,27 @@
 	(postgresql-send-execute-message out name maxnum)
 	(postgresql-send-flush-message out)
 	;; store it in the buffer
-	(fill-buffer query)))
+	(if query
+	    (fill-buffer query)
+	    ;; it must be non query so next response must be #\C
+	    (let loop ((r -1))
+	      (let-values (((code payload) (postgresql-read-response in)))
+		(case code
+		  ((#\C) (parse-command-complete payload)) ;; no more response
+		  ((#\Z) r) ;; in case
+		  (else
+		   (error "postgresql-execute!: unexpected code" code))))))))
 
     (define (postgresql-execute! prepared)
       (define conn (postgresql-prepared-statement-connection prepared))
       (define maxnum (*postgresql-maximum-results*))
-      (let ((q (make-postgresql-query conn (make-vector maxnum) 0
-				      prepared #f)))
-	(postgresql-query-descriptions-set! q
-	   (postgresql-prepared-statement-descriptions prepared))
-	  (do-execute! prepared q)))
+      (let ((desc (postgresql-prepared-statement-descriptions prepared)))
+	(if desc
+	    (let ((q (make-postgresql-query conn (make-vector maxnum) 
+					    0 prepared #f)))
+	      (postgresql-query-descriptions-set! q desc)
+	      (do-execute! prepared q))
+	    (do-execute! prepared #f))))
 
     (define (postgresql-close-prepared-statement! prepared)
       (define conn (postgresql-prepared-statement-connection prepared))

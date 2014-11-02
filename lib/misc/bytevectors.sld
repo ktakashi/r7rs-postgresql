@@ -47,7 +47,7 @@
 	   (dotimes (i (bytevector-length bv))
 	     (format out "~2,'0x" (bytevector-u8-ref bv i))))))))
    ((library (chibi bytevector))
-    (import (chibi bytevector)))
+    (import (scheme base) (chibi bytevector)))
    (else
     (cond-expand
      ((library (srfi 60))
@@ -117,7 +117,33 @@
 	     (else
 	      (write-string (integer->hex-string (bytevector-u8-ref bv i)) out)
 	      (lp (+ i 1))))))))))
+  (cond-expand
+   (sagittarius
+    (import (util bytevector)))
+   (else
+    (begin
+      ;; we don't need much thing for this
+      (define (bytevector-prefix-length bv1 bv2 start1 end1 start2 end2)
+	(let* ((delta (min (- end1 start1) (- end2 start2)))
+	       (end1 (+ start1 delta)))
+	  (if (and (eq? bv1 bv2) (= start1 start2))	; EQ fast path
+	      delta
+	      (let lp ((i start1) (j start2))		; Regular path
+		(if (or (>= i end1)
+			(not (= (bytevector-u8-ref bv1 i)
+				(bytevector-u8-ref bv2 j))))
+		    (- i start1)
+		    (lp (+ i 1) (+ j 1)))))))
+      
+      (define (bytevector-prefix? bv1 bv2)
+	(let* ((end1 (bytevector-length bv1))
+	       (end2 (bytevector-length bv2))
+	       (len1 (- end1 0)))
+	  (and (<= len1 (- end2 0))
+	       (= (bytevector-prefix-length bv1 bv2 0 end1 0 end2) len1)))))))
+
   (export bytevector-u16-ref-le bytevector-u16-ref-be 
 	  bytevector-u32-ref-be
 	  bytevector->integer
+	  bytevector-prefix?
 	  hex-string->bytevector bytevector->hex-string))
