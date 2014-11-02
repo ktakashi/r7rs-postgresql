@@ -66,6 +66,9 @@ Procedure: `(postgresql-execute-sql! conn sql)`
 
 Executes the given _sql_. If the _sql_ is a select statement then
 the returning value is a PostgreSQL query object. Otherwise `#t`.
+This procedure retrieves all result in one go if the _sql_ is a SELECE
+statement. So it may cause memory explosion if the result set is
+too big.
 
 
 Procedure: `(postgresql-fetch-query! query)`

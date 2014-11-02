@@ -270,8 +270,13 @@
       postgresql-prepared-statement?
       (connection postgresql-prepared-statement-connection)
       (sql        postgresql-prepared-statement-sql)
+      ;; prepared statement name
       (name       postgresql-prepared-statement-name
 		  postgresql-prepared-statement-name-set!)
+      ;; underling portal name
+      #;
+      (portal     postgresql-prepared-statement-portal
+		  postgresql-prepared-statement-portal-set!)
       (parameters postgresql-prepared-statement-parameters
 		  postgresql-prepared-statement-parameters-set!)
       ;; object id of the parameter data type
@@ -318,7 +323,9 @@
 		    (postgresql-prepared-statement-descriptions-set!
 		     prepared vec)
 		    prepared)))
-		((char=? code #\n) prepared) ;; NoData
+		((char=? code #\n)  ;; NoData
+		 (postgresql-prepared-statement-descriptions-set! prepared #f)
+		 prepared)
 		(else
 		 (error 
 		  "postgresql-prepared-statement: failed to get description"
@@ -329,31 +336,40 @@
       (make-postgresql-prepared-statement conn sql #f))
 
     (define (postgresql-bind-parameters! prepared . params)
-      (postgresql-prepared-statement-parameters-set! prepared params)
-      prepared)
-
-    (define (postgresql-execute! prepared)
       (define conn (postgresql-prepared-statement-connection prepared))
       (define (check prepared)
-	(and (not (postgresql-prepared-statement-name prepared))
-	     (init-prepared-statement prepared)))
+	;; i have no idea how to re-use prepared statement
+	;; for some reason it always returns 42P03 error.
+	;; it requires a portal (cursor) but it won't recreate
+	;; or something when we try to re-use...SUCKS!!!
+	(when (postgresql-prepared-statement-name prepared)
+	  (postgresql-close-prepared-statement! prepared))
+	(init-prepared-statement prepared))
       ;; need to be checked
       (check prepared)
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
-	    (name (postgresql-prepared-statement-name prepared))
-	    (params (postgresql-prepared-statement-parameters prepared))
-	    (maxnum (*postgresql-maximum-results*)))
-	;; do everything in one go here 
+	    (name (postgresql-prepared-statement-name prepared)))
 	;; to create the same portal if needed
 	(postgresql-send-bind-message out name name params '())
-	(postgresql-send-execute-message out name maxnum)
 	(postgresql-send-flush-message out)
 	;; handle response
 	(let-values (((code payload) (postgresql-read-response in)))
 	  ;; BindComplete(#\2)
 	  (unless (char=? code #\2)
 	    (error "postgresql-execute! failed to execute" code)))
+	(postgresql-prepared-statement-parameters-set! prepared params)
+	prepared))
+
+    (define (postgresql-execute! prepared)
+      (define conn (postgresql-prepared-statement-connection prepared))
+      (let ((out (postgresql-connection-sock-out conn))
+	    (in  (postgresql-connection-sock-in conn))
+	    (name (postgresql-prepared-statement-name prepared))
+	    ;; (params (postgresql-prepared-statement-parameters prepared))
+	    (maxnum (*postgresql-maximum-results*)))
+	(postgresql-send-execute-message out name maxnum)
+	(postgresql-send-flush-message out)
 	;; store it in the buffer
 	(let ((q (make-postgresql-query conn (make-vector maxnum) 0 #f)))
 	  (postgresql-query-descriptions-set! q
@@ -376,7 +392,8 @@
 	(let-values (((code payload) (postgresql-read-response in)))
 	  (unless (char=? code #\3)
 	    (error "postgresql-close-prepared-statement! failed to close"
-		   code prepared)))))
+		   code prepared)))
+	(postgresql-prepared-statement-name-set! prepared #f)))
 
     (define (parse-record query payload)
       (define (read-fix payload offset size)
