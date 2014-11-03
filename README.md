@@ -17,8 +17,9 @@ Supporting implementations
 This library should be portable for R7RS if the implementation supports 
 the following SRFIs;
 
-- SRFI-106
 - SRFI-60/SRFI-33 or R6RS library `(rnrs)`
+- SRFI-106
+- SRFI-19 (Optional)
 
 
 High level APIs

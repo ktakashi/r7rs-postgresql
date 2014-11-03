@@ -1,6 +1,6 @@
 ;;; -*- mode:scheme; coding:utf-8; -*-
 ;;;
-;;; misc/socket.sld - socket utilities
+;;; misc/socket-gauche.scm - workaround for Gauche
 ;;;  
 ;;;   Copyright (c) 2014  Takashi Kato  <ktakashi@ymail.com>
 ;;;   
@@ -28,28 +28,9 @@
 ;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;  
 
-(define-library (misc socket)
-  (cond-expand
-   ((library (srfi 106))
-    (import (srfi 106)))
-   (chibi
-    ;; only support what we need.
-    (import (scheme base) (chibi net) (scheme cxr) (chibi filesystem))
-    (begin
-      ;; well...
-      (define socket? list?)
-      (define (make-client-socket host port . opt)
-	(let ((r (open-net-io host port)))
-	  (unless r (error "make-client-socket: failed to create a socket"))
-	  r))
-      (define (socket-input-port sock) (cadr sock))
-      (define (socket-output-port sock) (caddr sock))
-      (define (socket-close sock) (close-file-descriptor (car sock)))
-      ;; do nothing for now
-      (define (socket-shutdown sock how) #t)
-      )))
-  (cond-expand
-   (gauche (import (misc socket-gauche)))
-   (else))
-  (export socket? make-client-socket socket-input-port socket-output-port
-	  socket-close socket-shutdown))
+(define-module misc.socket-gauche
+  (export socket?))
+(select-module misc.socket-gauche)
+
+(define socket? (with-module srfi-106 socket?))
+

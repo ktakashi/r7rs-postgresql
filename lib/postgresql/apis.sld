@@ -60,6 +60,48 @@
 	  (digest md5)
 	  (misc socket)
 	  (misc bytevectors))
+  (cond-expand
+   ((library (srfi 19))
+    (import (srfi 19))
+    (begin
+      (define (->date str templ zone?)
+	(define (find-char name cs)
+	  (let loop ((index (- (string-length name) 1)))
+	    (cond ((< index 0) #f)
+		  ((char=? (string-ref name index) #\space) #f)
+		  ((memv (string-ref name index) cs) (+ index 1))
+		  (else (loop (- index 1))))))
+	;; well seems Gauche doesn't support ~N so we parse ~H:~M:~S and
+	;; the rest do manually...
+	(let ((d (string->date str templ)))
+	  (cond ((find-char str '(#\.)) =>
+		 (lambda (pos)
+		   (let* ((p (find-char str '(#\+ #\-)))
+			  (offset (if p
+				      ;; must be +01...
+				      (string->number (string-copy str p))
+				      0))
+			  (milli (string->number
+				  (if p 
+				      (string-copy str pos (- p 1))
+				      (string-copy str pos)))))
+		     (make-date (* milli 1000000)
+				(date-second d)
+				(date-minute d)
+				(date-hour d)
+				(date-day d)
+				(date-month d)
+				(date-year d)
+				(* offset 3600)))))
+		(else d))))
+      (define (->timestamp str templ zone?)
+	(let ((d (->date str templ zone?)))
+	  (date->time-utc d)))))
+   (else 
+    (begin 
+      ;; fallback
+      (define (->date str templ zone?) str)
+      (define (->timestamp str templ zone?) str))))
   (begin
     ;; default 50
     (define *postgresql-maximum-results* (make-parameter 50))
@@ -74,7 +116,7 @@
       (password postgresql-connection-password)
       ;; after it's opened
       (socket   postgresql-connection-socket postgresql-connection-socket-set!)
-      ;; 
+      ;; input and output ports
       (sock-in  postgresql-connection-sock-in
 		postgresql-connection-sock-in-set!)
       (sock-out postgresql-connection-sock-out 
@@ -94,9 +136,9 @@
 		       (number->string counter))))
 		     
     (define (postgresql-open-connection! conn)
-      ;; TODO check if connection is already open.
-      ;;  - should we re-open? or keep it?
-      ;;  - probably re-open is safer since we don't have 'select'
+      (when (socket? (postgresql-connection-socket conn))
+	;; TODO should we try to send terminate?
+	(close-conn conn))
       (let ((s (make-client-socket (postgresql-connection-host conn)
 				   (postgresql-connection-port conn))))
 	(postgresql-connection-socket-set! conn s)
@@ -106,7 +148,9 @@
 	conn))
 
     (define (close-conn conn)
-      (socket-close (postgresql-connection-socket conn)))
+      (socket-close (postgresql-connection-socket conn))
+      ;; invalidate it
+      (postgresql-connection-socket-set! conn #f))
 
     ;; can be used anywhere
     (define (read-null-terminated-string params i)
@@ -447,12 +491,36 @@
       (define (convert value type)
 	;; i need something...
 	(case type
-	  ;; integer
-	  ((23) (string->number (utf8->string value)))
-	  ;; varchar
-	  ((1043) (utf8->string value))
+	  ;; bigint, bigserial, integer, float
+	  ((20 23 23 1700 700 21 21 23)
+	   (string->number (utf8->string value)))
+	  ((701) (inexact (string->number (utf8->string value))))
+	  ;; time related
+	  ;; date
+	  ((1082) (->date (utf8->string value) "~Y-~m-~d" #f))
+	  ;; time, time with time zone
+	  ((1083 1266)
+	   ;; well Gauche's string->date doesn't accept us to
+	   ;; pass only time. so workaround...
+	   (let ((s (cond-expand
+		     (gauche (string-append "00000000" (utf8->string value)))
+		     (else (utf8->string value))))
+		 (fmt (cond-expand
+		       (gauche "~Y~m~d~H:~M:~S")
+		       (else "~H:~M:~S"))))
+	     (->date s fmt (= type 1266))))
+	  ;; timestamp, timestamp with time zone
+	  ((1114 1184) 
+	   (->timestamp (utf8->string value)
+			"~Y-~m-~d~H:~M:~S"
+			(= type 1184)))
+	  ;; character, character varying 
+	  ((25 1042 1043 1560 1562) (utf8->string value))
+	  ((16) (string=? (utf8->string value) "t"))
+	  ;; should we return UUID for Sagittarius?
+	  ((2950) (utf8->string value))
 	  ;; else (just return for now)
-	  (else value)))
+	  (else  value)))
 
       (let* ((n (bytevector-u16-ref-be payload 0))
 	     (vec (make-vector n #f))
@@ -465,9 +533,14 @@
 		    (offset (+ offset 4)))
 		;; I hope this is the only negative number
 		;; or should we check if the most significat bit is set?
-		(let-values (((offset value) (read-fix payload offset size)))
-		  (vector-set! vec i (convert value type))
-		  (loop offset (+ i 1))))))))
+		(if (= size #xFFFFFFFF) ;; -1
+		    (begin
+		      (vector-set! vec i '())
+		      (loop offset (+ i 1)))
+		    (let-values (((offset value)
+				  (read-fix payload offset size)))
+		      (vector-set! vec i (convert value type))
+		      (loop offset (+ i 1)))))))))
 
     (define (fill-buffer query)
       (define conn (postgresql-query-connection query))
