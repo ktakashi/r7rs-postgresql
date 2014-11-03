@@ -117,6 +117,25 @@ Low level APIs
 TBD
 
 
+Data conversion
+---------------
+
+Data conversion is done automatically by high level APIs. Following table
+describes how it's done.
+
+| PostgreSQL type |     Scheme type    |
+|:--------------- | ------------------:|
+|   Integers      |   Number           |
+|   Float         |   Inexact number   |
+|   Characters    |   String           |
+|   Date          |   SRFI-19 date[^*] |
+|   Time          |   SRFI-19 date[^*] |
+|   Timestamp     |   SRFI-19 time[^*] |
+|   UUID          |   String           |
+
+[^*]: If the implementation supports SRFI-19, otherwise string.
+
+
 TODO
 ----
 

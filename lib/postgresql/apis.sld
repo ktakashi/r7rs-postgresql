@@ -50,6 +50,9 @@
 
 	  ;; configuration parameter
 	  *postgresql-maximum-results*
+	  *postgresql-date-format*
+	  *postgresql-time-format*
+	  *postgresql-timestamp-format*
 
 	  postgresql-fetch-query!
 	  )
@@ -105,6 +108,9 @@
   (begin
     ;; default 50
     (define *postgresql-maximum-results* (make-parameter 50))
+    (define *postgresql-date-format* (make-parameter "~Y-~m-~d"))
+    (define *postgresql-time-format* (make-parameter "~H:~M:~S"))
+    (define *postgresql-timestamp-format* (make-parameter "~Y-~m-~d~H:~M:~S"))
 
     (define-record-type postgresql-connection 
       (make-postgresql-connection host port database username password)
@@ -497,7 +503,7 @@
 	  ((701) (inexact (string->number (utf8->string value))))
 	  ;; time related
 	  ;; date
-	  ((1082) (->date (utf8->string value) "~Y-~m-~d" #f))
+	  ((1082) (->date (utf8->string value) (*postgresql-date-format*) #f))
 	  ;; time, time with time zone
 	  ((1083 1266)
 	   ;; well Gauche's string->date doesn't accept us to
@@ -506,13 +512,14 @@
 		     (gauche (string-append "00000000" (utf8->string value)))
 		     (else (utf8->string value))))
 		 (fmt (cond-expand
-		       (gauche "~Y~m~d~H:~M:~S")
-		       (else "~H:~M:~S"))))
+		       (gauche (string-append "~Y~m~d"
+					      (*postgresql-time-format*)))
+		       (else (*postgresql-time-format*)))))
 	     (->date s fmt (= type 1266))))
 	  ;; timestamp, timestamp with time zone
 	  ((1114 1184) 
 	   (->timestamp (utf8->string value)
-			"~Y-~m-~d~H:~M:~S"
+			(*postgresql-timestamp-format*)
 			(= type 1184)))
 	  ;; character, character varying 
 	  ((25 1042 1043 1560 1562) (utf8->string value))

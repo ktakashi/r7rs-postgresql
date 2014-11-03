@@ -47,4 +47,7 @@
 	  postgresql-close-prepared-statement!
 	  postgresql-fetch-query!
 	  
-	  *postgresql-maximum-results*))
+	  *postgresql-maximum-results*
+	  *postgresql-date-format*
+	  *postgresql-time-format*
+	  *postgresql-timestamp-format*))
