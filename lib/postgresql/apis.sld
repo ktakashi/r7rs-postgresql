@@ -74,8 +74,6 @@
 		  ((char=? (string-ref name index) #\space) #f)
 		  ((memv (string-ref name index) cs) (+ index 1))
 		  (else (loop (- index 1))))))
-	;; well seems Gauche doesn't support ~N so we parse ~H:~M:~S and
-	;; the rest do manually...
 	(let ((d (string->date str templ)))
 	  (cond ((find-char str '(#\.)) =>
 		 (lambda (pos)
@@ -506,15 +504,13 @@
 	  ((1082) (->date (utf8->string value) (*postgresql-date-format*) #f))
 	  ;; time, time with time zone
 	  ((1083 1266)
-	   ;; well Gauche's string->date doesn't accept us to
-	   ;; pass only time. so workaround...
-	   (let ((s (cond-expand
-		     (gauche (string-append "00000000" (utf8->string value)))
-		     (else (utf8->string value))))
-		 (fmt (cond-expand
-		       (gauche (string-append "~Y~m~d"
-					      (*postgresql-time-format*)))
-		       (else (*postgresql-time-format*)))))
+	   ;; It is very ambigous but seems string->date meant to be
+	   ;; only for *proper* date format. thus most likely only
+	   ;; time is not allowed. To make the code as portable as
+	   ;; possible, we pad 0y0m0d.
+	   ;; TODO should we return time-difference instead of date?
+	   (let ((s (string-append "00000000" (utf8->string value)))
+		 (fmt (string-append "~Y~m~d" (*postgresql-time-format*))))
 	     (->date s fmt (= type 1266))))
 	  ;; timestamp, timestamp with time zone
 	  ((1114 1184) 
