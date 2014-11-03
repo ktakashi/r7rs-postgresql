@@ -2,7 +2,7 @@
 	(digest md5)
 	(misc bytevectors)
 	(postgresql messages)
-	)
+	(postgresql))
 
 (cond-expand
  ((library (srfi 64))
@@ -33,7 +33,13 @@
 	((_ name expect expr)
 	 (test* name expect expr))
 	((_ expect expr)
-	 (test-equal 'expr expect expr))))))
+	 (test-equal 'expr expect expr))))
+    (define-syntax test-assert
+      (syntax-rules ()
+	((_ name expr)
+	 (test* name #t expr))
+	((_ expect expr)
+	 (test-assert 'expr expr))))))
  (else
   (import (scheme write))
   (begin
@@ -69,6 +75,7 @@
 
 (test-end)
 
+;; TODO more tests
 (test-begin "Protocol messages")
 
 (let ((out (open-output-bytevector)))
@@ -92,6 +99,17 @@
   (test-equal #u8(88 ;; #\X
 		  0 0 0 4)
 	      (get-output-bytevector out)))
+
+(test-end)
+
+;; TODO more tests
+(test-begin "APIs")
+
+(test-assert "connection?" 
+	     (postgresql-connection? 
+	      (make-postgresql-connection "localhost" "5432" 
+					  #f "postgres" "postgres")))
+
 
 (test-end)
 
