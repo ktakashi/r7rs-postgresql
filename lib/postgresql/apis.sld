@@ -405,7 +405,7 @@
 	(let-values (((code payload) (postgresql-read-response in)))
 	  ;; BindComplete(#\2)
 	  (unless (char=? code #\2)
-	    (error "postgresql-execute! failed to execute" code)))
+	    (error "postgresql-bind-parameters! failed to execute" code)))
 	(postgresql-prepared-statement-parameters-set! prepared params)
 	prepared))
 
@@ -452,8 +452,11 @@
 	    (let loop ((r -1))
 	      (let-values (((code payload) (postgresql-read-response in)))
 		(case code
-		  ((#\C) (parse-command-complete payload)) ;; no more response
-		  ((#\Z) r) ;; in case
+		  ((#\C)
+		   (postgresql-send-sync-message out)
+		   (loop (parse-command-complete payload)))
+		  ;; no more response
+		  ((#\Z) r)
 		  (else
 		   (error "postgresql-execute!: unexpected code" code))))))))
 
