@@ -105,6 +105,24 @@ Procedure: `(postgresql-fetch-query! query)`
 Fetch a row as a vector. If no more data are available, then returns `#f`.
 
 
+Procedure: `(postgresql-start-transaction! conn mode)`
+
+Issue `BEGIN` statement to start transaction. _mode_ specifies how the
+transation should be.
+
+NOTE: _mode_ is not implemented correctly yet.
+
+
+Procedure: `(postgresql-commit! conn)`
+
+Issue `COMMIT` statement.
+
+
+Procedure: `(postgresql-rollback! conn)`
+
+Issue `ROLLBACK` statement.
+
+
 Parameter: `*postgresql-maximum-results*`
 
 Configureation parameter for how many result it should fetch. Default
