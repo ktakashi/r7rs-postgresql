@@ -54,4 +54,5 @@
 	  *postgresql-maximum-results*
 	  *postgresql-date-format*
 	  *postgresql-time-format*
-	  *postgresql-timestamp-format*))
+	  *postgresql-timestamp-format*
+	  *postgresql-copy-data-handler*))

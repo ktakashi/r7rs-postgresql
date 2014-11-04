@@ -53,6 +53,7 @@
 	  *postgresql-date-format*
 	  *postgresql-time-format*
 	  *postgresql-timestamp-format*
+	  *postgresql-copy-data-handler*
 
 	  postgresql-fetch-query!
 
@@ -115,6 +116,10 @@
     (define *postgresql-date-format* (make-parameter "~Y-~m-~d"))
     (define *postgresql-time-format* (make-parameter "~H:~M:~S"))
     (define *postgresql-timestamp-format* (make-parameter "~Y-~m-~d~H:~M:~S"))
+    ;; default doing nothing
+    (define (default-copy-data-handler type data) #f)
+    (define *postgresql-copy-data-handler* 
+      (make-parameter default-copy-data-handler))
 
     (define-record-type postgresql-connection 
       (make-postgresql-connection host port database username password)
@@ -294,6 +299,13 @@
 					     type-size type-mod fmt-code))
 		  (loop (+ next 18) (+ i 1))))))))
 
+    (define (->u16-list bv offset)
+      (let ((len (bytevector-length bv)))
+	(let loop ((i offset) (r '()))
+	  (if (= i len)
+	      (reverse r)
+	      (loop (+ i 2) (cons (bytevector-u16-ref-be bv offset) r))))))
+
     ;; this is very inefficient one, do not use for
     ;; big query like more than 10000 or so
     (define (postgresql-execute-sql! conn sql)
@@ -339,13 +351,23 @@
 		(lambda ()
 		  (postgresql-read-response in))))
 	      ;; just return as it is
-	      ((#\d) (loop r (cons payload rows)))
-	      ((#\c) (loop (reverse rows) '()))
-	      ;; we don't care the code #\H
+	      ((#\H) 
+	       ((*postgresql-copy-data-handler*) 
+		'header (list (bytevector-u8-ref payload 0)
+			      (bytevector-u16-ref-be payload 1)
+			      (->u16-list payload 3)))
+	       (loop r rows))
+	      ((#\d) 
+	       ((*postgresql-copy-data-handler*) 'data payload)
+	       (loop r rows))
+	      ((#\c) 
+	       ((*postgresql-copy-data-handler*) 'complete #f)
+	       (loop r rows))
+	      ;; else? ignore
 	      (else (loop r rows)))))))
 
     (define-record-type postgresql-statement
-      (make-postgresql-prepared-statement connection sql name)
+      (make-postgresql-prepared-statement connection sql parameters)
       postgresql-prepared-statement?
       (connection postgresql-prepared-statement-connection)
       (sql        postgresql-prepared-statement-sql)
@@ -412,7 +434,8 @@
 
     ;; for god sake....
     (define (postgresql-prepared-statement conn sql)
-      (make-postgresql-prepared-statement conn sql #f))
+      (init-prepared-statement
+       (make-postgresql-prepared-statement conn sql #f)))
 
     (define (postgresql-bind-parameters! prepared . params)
       (define conn (postgresql-prepared-statement-connection prepared))
@@ -421,9 +444,9 @@
 	;; for some reason it always returns 42P03 error.
 	;; it requires a portal (cursor) but it won't recreate
 	;; or something when we try to re-use...SUCKS!!!
-	(when (postgresql-prepared-statement-name prepared)
-	  (postgresql-close-prepared-statement! prepared))
-	(init-prepared-statement prepared))
+	(when (postgresql-prepared-statement-parameters prepared)
+	  (postgresql-close-prepared-statement! prepared)
+	  (init-prepared-statement prepared)))
       ;; need to be checked
       (check prepared)
       (let ((out (postgresql-connection-sock-out conn))
@@ -488,12 +511,29 @@
 		   (loop (parse-command-complete payload)))
 		  ;; no more response
 		  ((#\Z) r)
+		  ;; i'm a bit lazy to decide how to handle this
+		  ;; so let user do this.
+		  ((#\H) 
+		   ((*postgresql-copy-data-handler*) 
+		    'header (list (bytevector-u8-ref payload 0)
+				  (bytevector-u16-ref-be payload 1)
+				  (->u16-list payload 3)))
+		   (loop r))
+		  ((#\d) 
+		   ((*postgresql-copy-data-handler*) 'data payload)
+		   (loop r))
+		  ((#\c) 
+		   ((*postgresql-copy-data-handler*) 'complete #f)
+		   (loop r))
 		  (else
 		   (error "postgresql-execute!: unexpected code" code))))))))
 
     (define (postgresql-execute! prepared)
       (define conn (postgresql-prepared-statement-connection prepared))
       (define maxnum (*postgresql-maximum-results*))
+      ;; dummy
+      (unless (postgresql-prepared-statement-parameters prepared)
+	(postgresql-bind-parameters! prepared))
       (let ((desc (postgresql-prepared-statement-descriptions prepared)))
 	(if desc
 	    (let ((q (make-postgresql-query conn (make-vector maxnum) 

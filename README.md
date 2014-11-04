@@ -129,6 +129,27 @@ Configureation parameter for how many result it should fetch. Default
 value is 50.
 
 
+Parameter: `*postgresql-copy-data-handler*`
+
+Handler of COPY to stdout command. The value must be a procedure and
+takes 2 arguments, data type and data. The data type could be the
+following symbols;
+
+- header
+- data
+- complete
+
+When the data type is `header` then the given data is a list of data
+information. It contains 3 elements, the format of overall COPY command,
+0 is textual, 1 is binary.
+
+When the data type is `data` then the given data is a bytevector whose
+content is the result of COPY command.
+
+When the data type is `complete` then the given data is `#f`. This indicates
+the COPY command is done.
+
+
 Low level APIs
 --------------
 
