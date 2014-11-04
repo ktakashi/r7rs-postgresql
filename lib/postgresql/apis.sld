@@ -496,6 +496,10 @@
 	  (values end (bytevector-copy payload offset end))))
 
       (define (convert value type)
+	;; for now lazy way
+	(define (parse-bytea value)
+	  (hex-string->bytevector (utf8->string (bytevector-copy value 2))))
+
 	;; i need something...
 	(case type
 	  ;; bigint, bigserial, integer, float
@@ -523,6 +527,7 @@
 	  ;; character, character varying 
 	  ((25 1042 1043 1560 1562) (utf8->string value))
 	  ((16) (string=? (utf8->string value) "t"))
+	  ((17) (parse-bytea value))
 	  ;; should we return UUID for Sagittarius?
 	  ((2950) (utf8->string value))
 	  ;; else (just return for now)
