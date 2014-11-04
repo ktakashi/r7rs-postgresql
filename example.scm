@@ -19,7 +19,7 @@
 
 (print "create tables")
 ;; may not be there yet (causes an error if there isn't)
-;; (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
+(guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
 (guard (e (else (print (error-object-message e))))
   (postgresql-execute-sql! conn
     "create table test (id integer, name varchar(50))"))

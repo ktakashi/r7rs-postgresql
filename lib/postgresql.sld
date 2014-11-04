@@ -55,4 +55,5 @@
 	  *postgresql-date-format*
 	  *postgresql-time-format*
 	  *postgresql-timestamp-format*
-	  *postgresql-copy-data-handler*))
+	  *postgresql-copy-data-handler*
+	  *postgresql-write-data-handler*))

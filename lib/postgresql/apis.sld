@@ -54,6 +54,7 @@
 	  *postgresql-time-format*
 	  *postgresql-timestamp-format*
 	  *postgresql-copy-data-handler*
+	  *postgresql-write-data-handler*
 
 	  postgresql-fetch-query!
 
@@ -119,6 +120,8 @@
     ;; default doing nothing
     (define (default-copy-data-handler type data) #f)
     (define *postgresql-copy-data-handler* 
+      (make-parameter default-copy-data-handler))
+    (define *postgresql-write-data-handler* 
       (make-parameter default-copy-data-handler))
 
     (define-record-type postgresql-connection 
@@ -209,9 +212,7 @@
 		 (write-string (utf8->string payload 1) (current-error-port))
 		 (newline (current-error-port)))
 	       (next in)))
-	    ((#\Z) 
-	     
-	     #t))))
+	    ((#\Z) #t))))
 
       (let ((in   (postgresql-connection-sock-in conn))
 	    (out  (postgresql-connection-sock-out conn))
@@ -306,6 +307,56 @@
 	      (reverse r)
 	      (loop (+ i 2) (cons (bytevector-u16-ref-be bv offset) r))))))
 
+    (define (->copy-data-header payload)
+      (list (bytevector-u8-ref payload 0)
+	    (bytevector-u16-ref-be payload 1)
+	    (->u16-list payload 3)))
+
+    ;; handling writing data.
+    ;; FIXME this works fine but ugly...
+    (define (call-data-writer payload in out need-sync?)
+      (with-exception-handler
+       ;; handling user error
+       ;; handler can raise an error to reject the process.
+       ;; in that case we need to consider 2 things, one is
+       ;; simple query which automatically sends ReadyForQuery
+       ;; other one is advanced process. The latter one, we
+       ;; need to send Sync message explicitly.
+       (lambda (e)
+	 (postgresql-send-copy-fail-message out (error-object-message e))
+	 (with-exception-handler
+	  (lambda (e2)
+	    (when need-sync? 
+	      (postgresql-send-sync-message out)
+	      (postgresql-read-response in))
+	    (error (error-object-message e2)
+		   (error-object-irritants e2)))
+	  (lambda () (postgresql-read-response in))))
+       (lambda ()
+	 ((*postgresql-write-data-handler*) 'header 
+	  (->copy-data-header payload))
+	 (let ((h (*postgresql-write-data-handler*)))
+	   (do ((r (h 'data #f) (h 'data #f)))
+	       ((not r))
+	     (postgresql-send-copy-data-message out r))
+	   (h 'complete #t))
+	 (postgresql-send-copy-done-message out)
+	 (postgresql-send-flush-message out)))
+      ;; it's a bit ugly
+      (with-exception-handler
+       (lambda (e)
+	 (when need-sync? 
+	   (postgresql-send-sync-message out)
+	   ;; ignore #\Z
+	   (postgresql-read-response in))
+	 (error (error-object-message e)
+		(error-object-irritants e)))
+       (lambda () 
+	 (postgresql-read-response in) ;; #\c or error
+	 (when need-sync? (postgresql-send-sync-message out))
+	 (postgresql-read-response in) ;; must be #\Z
+	 )))
+
     ;; this is very inefficient one, do not use for
     ;; big query like more than 10000 or so
     (define (postgresql-execute-sql! conn sql)
@@ -314,57 +365,54 @@
 	(postgresql-send-query-message out sql)
 	;; get 
 	(let loop ((r #t) (rows '()))
-	  (let-values (((code payload) (postgresql-read-response in)))
-	    (case code
-	      ((#\C)           ;; CommandComplete
-	       (cond ((postgresql-query? r)
-		      (postgresql-query-eoq-set! r #t)
-		      (loop r rows))
-		     (else
-		      ;; create query
-		      (loop (parse-command-complete payload) rows))))
-	      ((#\Z)           ;; ReadyForQuery
-	       (when (postgresql-query? r)
-		 (postgresql-query-buffer-set! r (list->vector (reverse rows)))
-		 (postgresql-query-cursor-set! r 0))
-	       r)
-	      ((#\T)	       ;; RowDescription
-	       ;; TODO should we store records?
-	       (let ((query (make-postgresql-query conn #f #f #f #f)))
-		 (loop (parse-row-description payload
-			(lambda (vec)
-			  (postgresql-query-descriptions-set! query vec)
-			  query)) rows)))
-	      ((#\D)
-	       (let ((rows (if (postgresql-query? r)
-			       (cons (parse-record r payload) rows)
-			       rows)))
-		 (loop r rows)))
-	      ((#\G)
-	       (postgresql-send-copy-fail-message 
-		out "direct SQL execution does not support COPY")
-	       ;; clean up a bit
-	       (with-exception-handler
-		(lambda (e)
-		  (postgresql-read-response in) ;; should be #\Z
-		  (error (error-object-message e) sql))
-		(lambda ()
-		  (postgresql-read-response in))))
-	      ;; just return as it is
-	      ((#\H) 
-	       ((*postgresql-copy-data-handler*) 
-		'header (list (bytevector-u8-ref payload 0)
-			      (bytevector-u16-ref-be payload 1)
-			      (->u16-list payload 3)))
-	       (loop r rows))
-	      ((#\d) 
-	       ((*postgresql-copy-data-handler*) 'data payload)
-	       (loop r rows))
-	      ((#\c) 
-	       ((*postgresql-copy-data-handler*) 'complete #f)
-	       (loop r rows))
-	      ;; else? ignore
-	      (else (loop r rows)))))))
+	  (guard (e (else
+		     ;; we need to receive #\Z
+		     (postgresql-read-response in)
+		     (error (error-object-message e)
+			    (error-object-irritants e))))
+	    (let-values (((code payload) (postgresql-read-response in)))
+	      (case code
+		((#\C)           ;; CommandComplete
+		 (cond ((postgresql-query? r)
+			(postgresql-query-eoq-set! r #t)
+			(loop r rows))
+		       (else
+			;; create query
+			(loop (parse-command-complete payload) rows))))
+		((#\Z)           ;; ReadyForQuery
+		 (when (postgresql-query? r)
+		   (postgresql-query-buffer-set! r 
+						 (list->vector (reverse rows)))
+		   (postgresql-query-cursor-set! r 0))
+		 r)
+		((#\T)	       ;; RowDescription
+		 ;; TODO should we store records?
+		 (let ((query (make-postgresql-query conn #f #f #f #f)))
+		   (loop (parse-row-description payload
+			   (lambda (vec)
+			     (postgresql-query-descriptions-set! query vec)
+			     query)) rows)))
+		((#\D)
+		 (let ((rows (if (postgresql-query? r)
+				 (cons (parse-record r payload) rows)
+				 rows)))
+		   (loop r rows)))
+		((#\G) 
+		 (call-data-writer payload in out #f)
+		 r)
+		;; just return as it is
+		((#\H) 
+		 ((*postgresql-copy-data-handler*) 'header 
+		  (->copy-data-header payload))
+		 (loop r rows))
+		((#\d) 
+		 ((*postgresql-copy-data-handler*) 'data payload)
+		 (loop r rows))
+		((#\c) 
+		 ((*postgresql-copy-data-handler*) 'complete #f)
+		 (loop r rows))
+		;; else? ignore
+		(else (loop r rows))))))))
 
     (define-record-type postgresql-statement
       (make-postgresql-prepared-statement connection sql parameters)
@@ -409,7 +457,8 @@
 	;; handle responses
 	(let-values (((code payload) (postgresql-read-response in)))
 	  (unless (char=? code #\1)
-	    (error "postgresql-prepared-statement: prepared statement" sql)))
+	    (error "postgresql-prepared-statement: prepared statement" sql
+		   code)))
 	(let-values (((code payload) (postgresql-read-response in)))
 	  (unless (char=? code #\t)
 	    (error "postgresql-prepared-statement: parameter description" 
@@ -515,10 +564,11 @@
 		  ;; so let user do this.
 		  ((#\H) 
 		   ((*postgresql-copy-data-handler*) 
-		    'header (list (bytevector-u8-ref payload 0)
-				  (bytevector-u16-ref-be payload 1)
-				  (->u16-list payload 3)))
+		    'header (->copy-data-header payload))
 		   (loop r))
+		  ((#\G) 
+		   (call-data-writer payload in out #t)
+		   r)
 		  ((#\d) 
 		   ((*postgresql-copy-data-handler*) 'data payload)
 		   (loop r))

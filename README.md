@@ -150,6 +150,33 @@ When the data type is `complete` then the given data is `#f`. This indicates
 the COPY command is done.
 
 
+Parameter: `*postgresql-write-data-handler*`
+
+Handler of COPY from stdin command. The value must be a procedure and
+takes 2 arguments, data type and data. The data type could be the
+following symbols;
+
+- header
+- data
+- complete
+
+When the data type is `header` then the given data is a list of data
+information. It contains 3 elements, the format of overall COPY command,
+0 is textual, 1 is binary.
+
+When the data type is `data` then the given data is a `#f`. When there is
+no more data to send, then handler must return `#f` otherwise it would go
+into inifinite loop.
+
+When the data type is `complete` then the given data is `#t`. This indicates
+the COPY command is done.
+
+
+These handlers are currently mere thin wrapper of COPY command. Using
+them, users need know about how the data send. For more detail, please
+refer PostgreSQL manual.
+
+
 Low level APIs
 --------------
 
