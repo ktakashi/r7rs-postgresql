@@ -47,6 +47,10 @@
 	  postgresql-close-prepared-statement!
 	  postgresql-fetch-query!
 	  
+	  postgresql-start-transaction!
+	  postgresql-commit!
+	  postgresql-rollback!
+
 	  *postgresql-maximum-results*
 	  *postgresql-date-format*
 	  *postgresql-time-format*

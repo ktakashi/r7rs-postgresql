@@ -55,6 +55,12 @@
 	  *postgresql-timestamp-format*
 
 	  postgresql-fetch-query!
+
+	  ;; some of utilities
+	  postgresql-start-transaction!
+	  postgresql-commit!
+	  postgresql-rollback!
+
 	  )
   (import (scheme base)
 	  (scheme write)
@@ -198,7 +204,9 @@
 		 (write-string (utf8->string payload 1) (current-error-port))
 		 (newline (current-error-port)))
 	       (next in)))
-	    ((#\Z) #t))))
+	    ((#\Z) 
+	     
+	     #t))))
 
       (let ((in   (postgresql-connection-sock-in conn))
 	    (out  (postgresql-connection-sock-out conn))
@@ -243,6 +251,15 @@
       (let ((out (postgresql-connection-sock-out conn)))
 	(postgresql-send-terminate-message out)
 	(close-conn conn)))
+
+    ;; these are mere SQL
+    (define (postgresql-start-transaction! conn mode)
+      ;; todo handle mode
+      (postgresql-execute-sql! conn "BEGIN"))
+    (define (postgresql-commit! conn)
+      (postgresql-execute-sql! conn "COMMIT"))
+    (define (postgresql-rollback! conn)
+      (postgresql-execute-sql! conn "ROLLBACK"))
 
     (define-record-type postgresql-query
       (make-postgresql-query connection buffer cursor statement eoq)
