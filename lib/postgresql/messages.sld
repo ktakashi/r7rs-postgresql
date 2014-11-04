@@ -46,6 +46,17 @@
 	  (misc socket)
 	  (misc bytevectors)
 	  (misc io))
+  (cond-expand
+   ((library (srfi 19))
+    (import (srfi 19)))
+   (else 
+    (begin 
+      (define (time? o) #f)
+      (define (time-utc->date t) t)
+      (define (date? o) #f)
+      (define (date->string d f) d)
+      (define (date-nanosecond d) 0)
+      (define (date-zone-offset d) 0))))
   (begin
     (define (send-s32 out v) (write-u32-be v out))
     (define (send-s16 out v) (write-u16-be v out))
@@ -185,10 +196,22 @@
       )
 
     (define (postgresql-send-bind-message out portal prepared params formats)
+      (define (->timestamp v)
+	(let ((off (date-zone-offset v)))
+	  (string-append
+	   (date->string v "~Y-~m-~d ~H:~M:~S.")
+	   ;; nano->milli
+	   (number->string (remainder (date-nanosecond v) 1000000))
+	   (if (negative? off)
+	       ""
+	       "+")
+	   (number->string (/ off 3600)))))
       (define (->bytevector v) 
 	(cond ((string? v) (string->utf8 v))
 	      ((number? v) (string->utf8 (number->string v)))
 	      ((bytevector? v) v)
+	      ((date? v)   (string->utf8 (->timestamp v)))
+	      ((time? v)   (->bytevector (time-utc->date v)))
 	      (else 
 	       (error "postgresql-send-bind-message: unsupported type" v))))
       ;; i think these must be one or the other but
