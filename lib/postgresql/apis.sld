@@ -328,6 +328,20 @@
 			       (cons (parse-record r payload) rows)
 			       rows)))
 		 (loop r rows)))
+	      ((#\G)
+	       (postgresql-send-copy-fail-message 
+		out "direct SQL execution does not support COPY")
+	       ;; clean up a bit
+	       (with-exception-handler
+		(lambda (e)
+		  (postgresql-read-response in) ;; should be #\Z
+		  (error (error-object-message e) sql))
+		(lambda ()
+		  (postgresql-read-response in))))
+	      ;; just return as it is
+	      ((#\d) (loop r (cons payload rows)))
+	      ((#\c) (loop (reverse rows) '()))
+	      ;; we don't care the code #\H
 	      (else (loop r rows)))))))
 
     (define-record-type postgresql-statement

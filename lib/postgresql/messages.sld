@@ -40,6 +40,7 @@
 	  postgresql-send-describe-message
 	  postgresql-send-execute-message
 	  postgresql-send-close-message
+	  postgresql-send-copy-fail-message
 	  postgresql-read-response)
   (import (scheme base) 
 	  (scheme write)
@@ -273,6 +274,16 @@
 	(send-bytes out bv)
 	(write-u8 0 out)
 	(flush-output-port out)))
+
+    ;; copy
+    (define (postgresql-send-copy-fail-message out msg)
+      (let ((bv (string->utf8 msg)))
+	(write-u8 (char->integer #\f) out)
+	(send-s32 out (+ 4 (bytevector-length bv) 1))
+	(send-bytes out bv)
+	(write-u8 0 out)
+	(flush-output-port out)))
+
     )
 
   )
