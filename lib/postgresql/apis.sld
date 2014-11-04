@@ -488,19 +488,14 @@
 
     (define (postgresql-bind-parameters! prepared . params)
       (define conn (postgresql-prepared-statement-connection prepared))
-      (define (check prepared)
-	;; i have no idea how to re-use prepared statement
-	;; for some reason it always returns 42P03 error.
-	;; it requires a portal (cursor) but it won't recreate
-	;; or something when we try to re-use...SUCKS!!!
-	(when (postgresql-prepared-statement-parameters prepared)
-	  (postgresql-close-prepared-statement! prepared)
-	  (init-prepared-statement prepared)))
-      ;; need to be checked
-      (check prepared)
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (name (postgresql-prepared-statement-name prepared)))
+	;; we need to send Sync before bind a parameter in case this
+	;; binding is middle of the process (e.g. not called execute!)
+	;; otherwise PostgreSQL respond error 42P03
+	(postgresql-send-sync-message out)
+	(postgresql-read-response in)
 	;; to create the same portal if needed
 	(postgresql-send-bind-message out name name params '())
 	(postgresql-send-flush-message out)
