@@ -56,4 +56,16 @@
 	  *postgresql-time-format*
 	  *postgresql-timestamp-format*
 	  *postgresql-copy-data-handler*
-	  *postgresql-write-data-handler*))
+	  *postgresql-write-data-handler*
+
+	  postgresql-transaction-mode
+
+	  postgresql-isolation-level-serializable
+	  postgresql-isolation-level-repeatable-read
+	  postgresql-isolation-level-read-committed
+	  postgresql-isolation-level-read-uncommitted
+	  postgresql-access-mode-read-write
+	  postgresql-access-mode-read-only
+	  postgresql-deferrable-on
+	  postgresql-deferrable-off
+	  ))

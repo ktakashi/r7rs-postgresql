@@ -107,10 +107,41 @@ Fetch a row as a vector. If no more data are available, then returns `#f`.
 
 Procedure: `(postgresql-start-transaction! conn mode)`
 
-Issue `BEGIN` statement to start transaction. _mode_ specifies how the
-transation should be.
+Issue `START TRANSACTION` statement to start transaction. 
+_mode_ specifies how the transation should be.
 
-NOTE: _mode_ is not implemented correctly yet.
+The argument _mode_ must be either PostgreSQL transaction mode object or
+`#f`.
+
+
+Procedure: `(postgresql-transaction-mode alist)`
+
+Creates a PostgreSQL transaction mode object. The _alist_ specifies
+how the transaction mode is created. If may have the following symbols
+as its key.
+
+- `isolation-level`
+- `access-mode`
+- `deferrable`
+
+Each key must have one of the followings;
+
+For `isolation-level`;
+
+- Variable: `postgresql-isolation-level-serializable`
+- Variable: `postgresql-isolation-level-repeatable-read`
+- Variable: `postgresql-isolation-level-read-committed`
+- Variable: `postgresql-isolation-level-read-uncommitted`
+
+For `access-mode`;
+
+- Variable: `postgresql-access-mode-read-write`
+- Variable: `postgresql-access-mode-read-only`
+
+For `deferrable`
+
+- Variable: `postgresql-deferrable-on`
+- Variable: `postgresql-deferrable-off`
 
 
 Procedure: `(postgresql-commit! conn)`
