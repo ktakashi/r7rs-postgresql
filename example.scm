@@ -80,7 +80,6 @@
 ;; delete
 (print "delete")
 (print (postgresql-execute-sql! conn "delete from test"))
-(postgresql-execute-sql! conn "commit")
 
 ;; max column test
 (let ((p (postgresql-prepared-statement 
