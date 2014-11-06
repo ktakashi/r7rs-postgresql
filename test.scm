@@ -24,9 +24,15 @@
   ;; it breaks hygine and we must need to import test
   ;; procedure as well...
   ;; I think it's a bug but this is how it is then it is...
-  (import (rename (gauche test)
-		  (test-start test-begin)
-		  (test-section test-group)))
+  (cond-expand
+   (gauche-0.9.4
+    (import (rename (gauche test)
+		    (test-start test-begin)
+		    (test-section test-group))))
+   (else
+    (import (rename (only (gauche test) test-start test-section test* test-end)
+		    (test-start test-begin)
+		    (test-section test-group)))))
   (begin
     (define-syntax test-equal
       (syntax-rules ()
