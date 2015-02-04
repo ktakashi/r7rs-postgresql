@@ -25,187 +25,189 @@ the following SRFIs;
 High level APIs
 ---------------
 
-Library: `(postgresql)`
+### Library
+- `(postgresql)`  The library provides high level APIs to communicate PostgreSQL.
 
-The library provides high level APIs to communicate PostgreSQL.
 
+### Procedures
+- `(postgresql-connection? obj)`
 
-Procedure: `(postgresql-connection? obj)`
+  Returns `#t` if _obj_ is an PostgreSQL connection object.
 
-Returns `#t` if _obj_ is an PostgreSQL connection object.
 
+-  `(make-postgresql-connection host port database username password)`
 
-Procedure: `(make-postgresql-connection host port database username password)`
+   `database` can be `#f`.
 
-`database` can be `#f`.
+   All arguments must be a string except `database`. Creates a
+   PostgreSQL connection. At this moment, the connection to the server
+   is *not* established.
 
-All arguments must be a string except `database`. Creates a PostgreSQL
-connection. At this moment, the connection to the server is *not* established.
 
+- `(postgresql-open-connection! conn)`
 
-Procedure: `(postgresql-open-connection! conn)`
+  Establishes a connection with specified _conn_ object.
 
-Establishes a connection with specified _conn_ object.
 
+- `(postgresql-login! conn)`
 
-Procedure: `(postgresql-login! conn)`
+  Logging in to the PostgreSQL server.
 
-Logging in to the PostgreSQL server.
 
+- `(postgresql-terminate! conn)`
 
-Procedure: `(postgresql-terminate! conn)`
+  Terminates the session and disconnects connection.
 
-Terminates the session and disconnects connection.
 
+- `(postgresql-prepared-statement? obj)`
 
-Procedure: `(postgresql-prepared-statement? obj)`
+  Return `#t` if _obj_ is a PostgreSQL prepared statement.
 
-Return `#t` if _obj_ is a PostgreSQL prepared statement.
 
+- `(postgresql-prepared-statement conn sql)`
 
-Procedure: `(postgresql-prepared-statement conn sql)`
+  Creates a prepared statement object.
 
-Creates a prepared statement object.
 
+- `(postgresql-close-prepared-statement! prepared-statement)`
 
-Procedure: `(postgresql-close-prepared-statement! prepared-statement)`
+  Closes prepared statement.
 
-Closes prepared statement.
 
+- `(postgresql-bind-parameters! prepared-statement . params)`
 
-Procedure: `(postgresql-bind-parameters! prepared-statement . params)`
+  Binds parameter _params_ to given _prepared-statement_.
 
-Binds parameter _params_ to given _prepared-statement_.
 
+- `(postgresql-execute! prepared-statement)`
 
-Procedure: `(postgresql-execute! prepared-statement)`
+  Executes the given _prepared-statement_ and returns either
+  PostgreSQL query object for SELECT statement or affected row count.
 
-Executes the given _prepared-statement_ and returns either PostgreSQL
-query object for SELECT statement or affected row count.
+  To retrieve the result, use `postgresql-fetch-query!` procedure.
 
-To retrieve the result, use `postgresql-fetch-query!` procedure.
 
+- `(postgresql-query? obj)`
 
-Procedure: `(postgresql-query? obj)`
+  Returns `#t` if _obj_ is a PostgreSQL query object.
 
-Returns `#t` if _obj_ is a PostgreSQL query object.
 
+- `(postgresql-execute-sql! conn sql)`
 
-Procedure: `(postgresql-execute-sql! conn sql)`
+  Executes the given _sql_. If the _sql_ is a select statement then
+  the returning value is a PostgreSQL query object. Otherwise `#t`.
+  This procedure retrieves all result in one go if the _sql_ is a
+  SELECE statement. So it may cause memory explosion if the result set
+  is too big.
 
-Executes the given _sql_. If the _sql_ is a select statement then
-the returning value is a PostgreSQL query object. Otherwise `#t`.
-This procedure retrieves all result in one go if the _sql_ is a SELECE
-statement. So it may cause memory explosion if the result set is
-too big.
 
+- `(postgresql-fetch-query! query)`
 
-Procedure: `(postgresql-fetch-query! query)`
+  Fetch a row as a vector. If no more data are available, then returns
+  `#f`.
 
-Fetch a row as a vector. If no more data are available, then returns `#f`.
 
+- `(postgresql-start-transaction! conn mode)`
 
-Procedure: `(postgresql-start-transaction! conn mode)`
+  Issue `START TRANSACTION` statement to start transaction.  _mode_
+  specifies how the transation should be.
 
-Issue `START TRANSACTION` statement to start transaction. 
-_mode_ specifies how the transation should be.
+  The argument _mode_ must be either PostgreSQL transaction mode
+  object or `#f`.
 
-The argument _mode_ must be either PostgreSQL transaction mode object or
-`#f`.
 
+- `(postgresql-transaction-mode alist)`
 
-Procedure: `(postgresql-transaction-mode alist)`
+  Creates a PostgreSQL transaction mode object. The _alist_ specifies
+  how the transaction mode is created. If may have the following
+  symbols as its key.
 
-Creates a PostgreSQL transaction mode object. The _alist_ specifies
-how the transaction mode is created. If may have the following symbols
-as its key.
+  - `isolation-level`
+  - `access-mode`
+  - `deferrable`
 
-- `isolation-level`
-- `access-mode`
-- `deferrable`
+  Each key must have one of the followings;
 
-Each key must have one of the followings;
+  For `isolation-level`;
 
-For `isolation-level`;
+  - Variable: `postgresql-isolation-level-serializable`
+  - Variable: `postgresql-isolation-level-repeatable-read`
+  - Variable: `postgresql-isolation-level-read-committed`
+  - Variable: `postgresql-isolation-level-read-uncommitted`
 
-- Variable: `postgresql-isolation-level-serializable`
-- Variable: `postgresql-isolation-level-repeatable-read`
-- Variable: `postgresql-isolation-level-read-committed`
-- Variable: `postgresql-isolation-level-read-uncommitted`
+  For `access-mode`;
 
-For `access-mode`;
+  - Variable: `postgresql-access-mode-read-write`
+  - Variable: `postgresql-access-mode-read-only`
 
-- Variable: `postgresql-access-mode-read-write`
-- Variable: `postgresql-access-mode-read-only`
+  For `deferrable`
 
-For `deferrable`
+  - Variable: `postgresql-deferrable-on`
+  - Variable: `postgresql-deferrable-off`
 
-- Variable: `postgresql-deferrable-on`
-- Variable: `postgresql-deferrable-off`
 
+- `(postgresql-commit! conn)`
 
-Procedure: `(postgresql-commit! conn)`
+  Issue `COMMIT` statement.
 
-Issue `COMMIT` statement.
 
+- `(postgresql-rollback! conn)`
 
-Procedure: `(postgresql-rollback! conn)`
+  Issue `ROLLBACK` statement.
 
-Issue `ROLLBACK` statement.
+### Parameters
+- `*postgresql-maximum-results*`
 
+  Configureation parameter for how many result it should
+  fetch. Default value is 50.
 
-Parameter: `*postgresql-maximum-results*`
 
-Configureation parameter for how many result it should fetch. Default
-value is 50.
+- `*postgresql-copy-data-handler*`
 
-
-Parameter: `*postgresql-copy-data-handler*`
-
-Handler of COPY to stdout command. The value must be a procedure and
-takes 2 arguments, data type and data. The data type could be the
-following symbols;
+  Handler of COPY to stdout command. The value must be a procedure and
+  takes 2 arguments, data type and data. The data type could be the
+  following symbols;
 
 - header
 - data
 - complete
 
-When the data type is `header` then the given data is a list of data
-information. It contains 3 elements, the format of overall COPY command,
-0 is textual, 1 is binary.
+  When the data type is `header` then the given data is a list of data
+  information. It contains 3 elements, the format of overall COPY
+  command, 0 is textual, 1 is binary.
 
-When the data type is `data` then the given data is a bytevector whose
-content is the result of COPY command.
+  When the data type is `data` then the given data is a bytevector
+  whose content is the result of COPY command.
 
-When the data type is `complete` then the given data is `#f`. This indicates
-the COPY command is done.
-
-
-Parameter: `*postgresql-write-data-handler*`
-
-Handler of COPY from stdin command. The value must be a procedure and
-takes 2 arguments, data type and data. The data type could be the
-following symbols;
-
-- header
-- data
-- complete
-
-When the data type is `header` then the given data is a list of data
-information. It contains 3 elements, the format of overall COPY command,
-0 is textual, 1 is binary.
-
-When the data type is `data` then the given data is a `#f`. When there is
-no more data to send, then handler must return `#f` otherwise it would go
-into inifinite loop.
-
-When the data type is `complete` then the given data is `#t`. This indicates
-the COPY command is done.
+  When the data type is `complete` then the given data is `#f`. This
+  indicates the COPY command is done.
 
 
-These handlers are currently mere thin wrapper of COPY command. Using
-them, users need know about how the data send. For more detail, please
-refer PostgreSQL manual.
+- `*postgresql-write-data-handler*`
+
+ Handler of COPY from stdin command. The value must be a procedure and
+ takes 2 arguments, data type and data. The data type could be the
+ following symbols;
+
+ - header
+ - data
+ - complete
+
+  When the data type is `header` then the given data is a list of data
+  information. It contains 3 elements, the format of overall COPY
+  command, 0 is textual, 1 is binary.
+
+  When the data type is `data` then the given data is a `#f`. When
+  there is no more data to send, then handler must return `#f`
+  otherwise it would go into inifinite loop.
+
+  When the data type is `complete` then the given data is `#t`. This indicates
+  the COPY command is done.
+
+
+  These handlers are currently mere thin wrapper of COPY command. Using
+  them, users need know about how the data send. For more detail, please
+  refer PostgreSQL manual.
 
 
 Low level APIs
@@ -220,17 +222,17 @@ Data conversion
 Data conversion is done automatically by high level APIs. Following table
 describes how it's done.
 
-| PostgreSQL type |     Scheme type    |
-|:--------------- | ------------------:|
-|   Integers      |   Number           |
-|   Float         |   Inexact number   |
-|   Characters    |   String           |
-|   Date          |   SRFI-19 date[^*] |
-|   Time          |   SRFI-19 date[^*] |
-|   Timestamp     |   SRFI-19 time[^*] |
-|   UUID          |   String           |
+| PostgreSQL type |     Scheme type      |
+|:--------------- | --------------------:|
+|   Integers      |   Number             |
+|   Float         |   Inexact number     |
+|   Characters    |   String             |
+|   Date          |   SRFI-19 date[^fn1] |
+|   Time          |   SRFI-19 date[^fn1] |
+|   Timestamp     |   SRFI-19 time[^fn1] |
+|   UUID          |   String             |
 
-[^*]: If the implementation supports SRFI-19, otherwise string.
+[^fn1]: If the implementation supports SRFI-19, otherwise string.
 
 
 TODO
