@@ -123,6 +123,21 @@
 (guard (e (else (print (error-object-message e))))
   (postgresql-execute-sql! conn "drop table test"))
 
+;; issue #2 re-creation of prepared statement
+;; ? is not a valid placeholder in PostgreSQL
+(guard (e (else (print e)))
+  (let ((ps (postgresql-prepared-statement 
+             conn "select * from foo where a = ?")))
+    (print ps)
+    (postgresql-close-prepared-statement! ps)))
+;; this hanged
+(guard (e (else (print e)))
+  (let ((ps (postgresql-prepared-statement 
+             conn "select * from foo where a = ?")))
+    (print ps)
+    (postgresql-close-prepared-statement! ps)))
+
+
 ;; terminate and close connection
 (print "terminate")
 (postgresql-terminate! conn)

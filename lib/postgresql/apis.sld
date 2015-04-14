@@ -506,6 +506,12 @@
 	    (in  (postgresql-connection-sock-in conn))
 	    (sql (postgresql-prepared-statement-sql prepared))
 	    (name (generate-unique-string conn)))
+	;; we need to send sync here so that
+	;; previous failure would be cleared. Fixes issue #2
+	(postgresql-send-sync-message out)
+	;; server sends ReadyForQuery
+	(postgresql-read-response in)
+
 	(postgresql-send-parse-message out name sql '())
 	(postgresql-prepared-statement-name-set! prepared name)
 	;; get description
