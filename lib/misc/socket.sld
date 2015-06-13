@@ -49,7 +49,8 @@
       (define (socket-shutdown sock how) #t)
       )))
   (cond-expand
-   (gauche (import (misc socket-gauche)))
+   (gauche (import (gauche base))
+	   (begin (define socket? (with-module srfi-106 socket?))))
    (else))
   (export socket? make-client-socket socket-input-port socket-output-port
 	  socket-close socket-shutdown))

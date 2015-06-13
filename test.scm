@@ -1,6 +1,7 @@
 (import (scheme base)
 	(digest md5)
 	(misc bytevectors)
+	(misc socket)
 	(postgresql messages)
 	(postgresql))
 
@@ -66,6 +67,11 @@
 	     (display " but got ")
 	     (write res)
 	     (newline))))))))))
+
+(test-begin "Misc")
+;; for Gauche
+(test-assert "socket?" (not (not socket?)))
+(test-end)
 
 
 (test-begin "PostgreSQL")
