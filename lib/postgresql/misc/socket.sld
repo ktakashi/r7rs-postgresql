@@ -1,8 +1,8 @@
 ;;; -*- mode:scheme; coding:utf-8; -*-
 ;;;
-;;; misc/io.sld - I/O utilities
+;;; postgresql/misc/socket.sld - socket utilities
 ;;;  
-;;;   Copyright (c) 2014  Takashi Kato  <ktakashi@ymail.com>
+;;;   Copyright (c) 2014-2015  Takashi Kato  <ktakashi@ymail.com>
 ;;;   
 ;;;   Redistribution and use in source and binary forms, with or without
 ;;;   modification, are permitted provided that the following conditions
@@ -28,41 +28,29 @@
 ;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;  
 
-(define-library (misc io)
-  (import (scheme base) (scheme case-lambda))
+(define-library (postgresql misc socket)
   (cond-expand
-   (sagittarius
-    (import (binary io) (only (rnrs) endianness))
+   ((library (srfi 106))
+    (import (srfi 106)))
+   (chibi
+    ;; only support what we need.
+    (import (scheme base) (chibi net) (scheme cxr) (chibi filesystem))
     (begin
-      (define write-u16-be
-	(case-lambda 
-	 ((value) (write-u16-be value (current-output-port)))
-	 ((value out) (put-u16 out value (endianness big)))))
-      (define write-u32-be
-	(case-lambda 
-	 ((value) (write-u32-be value (current-output-port)))
-	 ((value out) (put-u32 out value (endianness big)))))))
-   (else
-    (cond-expand
-     ;; well chibi only has srfi 33...
-     ((library (srfi 60))
-      (import (srfi 60)))
-     ((library (srfi 33))
-      (import (srfi 33))))
-    (begin
-      ;; it's all big endian
-      (define (write-nbytes out value n)
-	(let loop ((r '()) (v value) (i 0))
-	  (if (= i n)
-	      (for-each (lambda (b) (write-u8 b out)) r)
-	      (let ((b (bitwise-and v #xFF)))
-		(loop (cons b r) (arithmetic-shift v -8) (+ i 1))))))
-      (define write-u16-be
-	(case-lambda
-	 ((value) (write-u16-be value (current-output-port)))
-	 ((value out) (write-nbytes out value 2))))
-      (define write-u32-be
-	(case-lambda
-	 ((value) (write-u32-be value (current-output-port)))
-	 ((value out) (write-nbytes out value 4)))))))
-  (export write-u16-be write-u32-be))
+      ;; well...
+      (define socket? list?)
+      (define (make-client-socket host port . opt)
+	(let ((r (open-net-io host port)))
+	  (unless r (error "make-client-socket: failed to create a socket"))
+	  r))
+      (define (socket-input-port sock) (cadr sock))
+      (define (socket-output-port sock) (caddr sock))
+      (define (socket-close sock) (close-file-descriptor (car sock)))
+      ;; do nothing for now
+      (define (socket-shutdown sock how) #t)
+      )))
+  (cond-expand
+   (gauche (import (gauche base))
+	   (begin (define socket? (with-module srfi-106 socket?))))
+   (else))
+  (export socket? make-client-socket socket-input-port socket-output-port
+	  socket-close socket-shutdown))

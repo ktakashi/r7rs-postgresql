@@ -1,8 +1,8 @@
 ;;; -*- mode:scheme; coding:utf-8; -*-
 ;;;
-;;; postgresql/messages.sld - PostgreSQL protocol messages
+;;; postgresql/digest/md5.sld - PostgreSQL MD5 hash
 ;;;  
-;;;   Copyright (c) 2014  Takashi Kato  <ktakashi@ymail.com>
+;;;   Copyright (c) 2014-2015  Takashi Kato  <ktakashi@ymail.com>
 ;;;   
 ;;;   Redistribution and use in source and binary forms, with or without
 ;;;   modification, are permitted provided that the following conditions
@@ -29,11 +29,11 @@
 ;;;  
 
 ;; TODO should we return string???
-(define-library (digest md5)
+(define-library (postgresql digest md5)
   (import (scheme base))
   (cond-expand
    (sagittarius
-    (import (math) (misc bytevectors) (rnrs))
+    (import (math) (postgresql misc bytevectors) (rnrs))
     (begin
       (define (md5 src)
 	(let ((bv (cond ((string? src) (string->utf8 src))
@@ -54,7 +54,7 @@
      ((library (srfi 33))
       (import (srfi 33)))
      (else (begin (error '(digest md5) "bitwise library is required"))))
-    (import (misc bytevectors))
+    (import (postgresql misc bytevectors))
     (include "md5.scm")
     #;
     (begin

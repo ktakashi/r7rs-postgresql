@@ -80,9 +80,9 @@
 	  (scheme write)
 	  (scheme char)
 	  (postgresql messages)
-	  (digest md5)
-	  (misc socket)
-	  (misc bytevectors))
+	  (postgresql digest md5)
+	  (postgresql misc socket)
+	  (postgresql misc bytevectors))
   (cond-expand
    ((library (srfi 19))
     (import (srfi 19))

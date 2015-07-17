@@ -1,7 +1,7 @@
 (import (scheme base)
-	(digest md5)
-	(misc bytevectors)
-	(misc socket)
+	(postgresql digest md5)
+	(postgresql misc bytevectors)
+	(postgresql misc socket)
 	(postgresql messages)
 	(postgresql))
 

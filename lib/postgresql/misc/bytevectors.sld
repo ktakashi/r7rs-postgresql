@@ -1,8 +1,8 @@
 ;;; -*- mode:scheme; coding:utf-8; -*-
 ;;;
-;;; misc/bytevectors.sld - bytevector utilities
+;;; postgresql/misc/bytevectors.sld - bytevector utilities
 ;;;  
-;;;   Copyright (c) 2014  Takashi Kato  <ktakashi@ymail.com>
+;;;   Copyright (c) 2014-2015  Takashi Kato  <ktakashi@ymail.com>
 ;;;   
 ;;;   Redistribution and use in source and binary forms, with or without
 ;;;   modification, are permitted provided that the following conditions
@@ -28,7 +28,7 @@
 ;;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;  
 
-(define-library (misc bytevectors)
+(define-library (postgresql misc bytevectors)
   (cond-expand
    (sagittarius
     (import (rnrs)
