@@ -57,6 +57,7 @@
 	  *postgresql-timestamp-format*
 	  *postgresql-copy-data-handler*
 	  *postgresql-write-data-handler*
+	  *postgresql-notice-handler*
 
 	  postgresql-transaction-mode
 

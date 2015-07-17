@@ -55,6 +55,7 @@
 	  *postgresql-timestamp-format*
 	  *postgresql-copy-data-handler*
 	  *postgresql-write-data-handler*
+	  *postgresql-notice-handler*
 
 	  postgresql-fetch-query!
 
@@ -130,10 +131,14 @@
     (define *postgresql-timestamp-format* (make-parameter "~Y-~m-~d~H:~M:~S"))
     ;; default doing nothing
     (define (default-copy-data-handler type data) #f)
+    (define (default-notice-handler code payload) #f)
+
     (define *postgresql-copy-data-handler*
       (make-parameter default-copy-data-handler))
     (define *postgresql-write-data-handler*
       (make-parameter default-copy-data-handler))
+    (define *postgresql-notice-handler*
+      (make-parameter default-notice-handler))
 
     (define-record-type postgresql-connection
       (make-postgresql-connection host port database username password)
@@ -217,11 +222,8 @@
 	     (store-params payload)
 	     (next in))
 	    ((#\N)
-	     (let ((code (bytevector-u8-ref payload 0)))
-	       ;; TODO how should we treat this?
-	       (unless (zero? code)
-		 (write-string (utf8->string payload 1) (current-error-port))
-		 (newline (current-error-port)))
+	     (let ((code (integer->char (bytevector-u8-ref payload 0))))
+	       ((*postgresql-notice-handler*) code (utf8->string payload 1))
 	       (next in)))
 	    ((#\Z) #t))))
 
@@ -422,12 +424,11 @@
 	    (in  (postgresql-connection-sock-in conn)))
 	(postgresql-send-query-message out sql)
 	;; get
-	(let loop ((r #t) (rows '()))
-	  (guard (e (else
-		     ;; we need to receive #\Z
-		     (postgresql-read-response in)
-		     (error (error-object-message e)
-			    (error-object-irritants e))))
+	(guard (e (else
+		   ;; must be #\E so we need to receive #\Z
+		   (postgresql-read-response in)
+		   (raise e)))
+	  (let loop ((r #t) (rows '()))
 	    (let-values (((code payload) (postgresql-read-response in)))
 	      (case code
 		((#\C)           ;; CommandComplete
@@ -469,6 +470,10 @@
 		((#\c)
 		 ((*postgresql-copy-data-handler*) 'complete #f)
 		 (loop r rows))
+		((#\N)
+		 (let ((code (integer->char (bytevector-u8-ref payload 0))))
+		   ((*postgresql-notice-handler*) code (utf8->string payload 1))
+		   (loop r rows)))
 		;; else? ignore
 		(else (loop r rows))))))))
 
@@ -634,6 +639,11 @@
 		  ((#\c)
 		   ((*postgresql-copy-data-handler*) 'complete #f)
 		   (loop r))
+		  ((#\N)
+		   (let ((code (integer->char (bytevector-u8-ref payload 0))))
+		     ((*postgresql-notice-handler*) code 
+		      (utf8->string payload 1))
+		     (loop r)))
 		  (else
 		   (error "postgresql-execute!: unexpected code" code))))))))
 
