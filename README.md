@@ -239,6 +239,13 @@ _Note_: If the implementation doesn't support SRFI-19, the scheme type
 will be string.
 
 
+Copyright and lincense
+----------------------
+
+Copyright 2014-2015 Takashi Kato. Code released under the BSD-style license.
+See [COPYING](COPYING).
+
+
 TODO
 ----
 
