@@ -557,6 +557,10 @@
 
     (define (postgresql-bind-parameters! prepared . params)
       (define conn (postgresql-prepared-statement-connection prepared))
+      (define (convert param)
+	(if (vector? param)
+	    (vector->array param)
+	    param))
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (name (postgresql-prepared-statement-name prepared)))
@@ -722,6 +726,21 @@
 	(define (parse-bytea value)
 	  (hex-string->bytevector (utf8->string (bytevector-copy value 2))))
 
+	(define (parse-date value)
+	  (->date (utf8->string value) (*postgresql-date-format*) #f))
+	(define (parse-time value zone?)
+	  ;; It is very ambigous but seems string->date meant to be
+	   ;; only for *proper* date format. thus most likely only
+	   ;; time is not allowed. To make the code as portable as
+	   ;; possible, we pad 0y0m0d.
+	   ;; TODO should we return time-difference instead of date?
+	   (let ((s (string-append "00000000" (utf8->string value)))
+		 (fmt (string-append "~Y~m~d" (*postgresql-time-format*))))
+	     (->date s fmt zone?)))
+	(define (parse-timestamp value zone?)
+	  (->timestamp (utf8->string value)
+		       (*postgresql-timestamp-format*)
+		       zone?))
 	;; i need something...
 	;; catalog/pg_type.h should be the one
 	(case type
@@ -731,22 +750,11 @@
 	  ((701) (inexact (string->number (utf8->string value))))
 	  ;; time related
 	  ;; date
-	  ((1082) (->date (utf8->string value) (*postgresql-date-format*) #f))
+	  ((1082) (parse-date value))
 	  ;; time, time with time zone
-	  ((1083 1266)
-	   ;; It is very ambigous but seems string->date meant to be
-	   ;; only for *proper* date format. thus most likely only
-	   ;; time is not allowed. To make the code as portable as
-	   ;; possible, we pad 0y0m0d.
-	   ;; TODO should we return time-difference instead of date?
-	   (let ((s (string-append "00000000" (utf8->string value)))
-		 (fmt (string-append "~Y~m~d" (*postgresql-time-format*))))
-	     (->date s fmt (= type 1266))))
+	  ((1083 1266) (parse-time value (= type 1266)))
 	  ;; timestamp, timestamp with time zone
-	  ((1114 1184)
-	   (->timestamp (utf8->string value)
-			(*postgresql-timestamp-format*)
-			(= type 1184)))
+	  ((1114 1184) (parse-timestamp value (= type 1184)))
 	  ;; character, character varying
 	  ((25 1042 1043 1560 1562) (utf8->string value))
 	  ((16) (string=? (utf8->string value) "t"))
@@ -761,8 +769,15 @@
 	  ((1001) (parse-array value parse-bytea))
 	  ((1005 1007 1016 1021 1022)
 	   (parse-array value (lambda (v) (string->number (utf8->string v)))))
+	  ((1182) (parse-array value parse-date))
+	  ((1183 1270)
+	   (parse-array value (lambda (value) 
+				(parse-time value (= type 1270)))))
+	  ((1115 1185)
+	   (parse-array value (lambda (value) 
+				(parse-timestamp value (= type 1185)))))
 	  ;; else (just return for now)
-	  (else  value)))
+	  (else (display type) (newline) value)))
 
       (let* ((n (bytevector-u16-ref-be payload 0))
 	     (vec (make-vector n #f))
