@@ -680,6 +680,38 @@
 		   code prepared)))
 	(postgresql-prepared-statement-name-set! prepared #f)))
 
+    ;; assumes given value is properly constructed
+    (define (parse-array value convert)
+      ;; exclude end
+      (define len (- (bytevector-length value) 1))
+      (define (parse-item value offset)
+	;; don't need start
+	;; (define start (char->integer #\{))
+	(define end (char->integer #\}))
+	(define comma (char->integer #\,))
+	(define dq (char->integer #\"))
+	(define es (char->integer #\\))
+	(let ((out (open-output-bytevector)))
+	  (let loop ((i offset) (in-dq? #f))
+	    (cond ((= (bytevector-u8-ref value i) end)
+		   (values (get-output-bytevector out) i))
+		  ((and (not in-dq?) (= (bytevector-u8-ref value i) comma))
+		   (values (get-output-bytevector out) (+ i 1)))
+		  ((= (bytevector-u8-ref value i) dq)
+		   (loop (+ i 1) (not in-dq?)))
+		  ((= (bytevector-u8-ref value i) es)
+		   (write-u8 (bytevector-u8-ref value (+ i 1)) out)
+		   (loop (+ i 2) in-dq?))
+		  (else
+		   (write-u8 (bytevector-u8-ref value i) out)
+		   (loop (+ i 1) in-dq?))))))
+
+      (let loop ((i 1) (r '()))
+	(if (= i len)
+	    (list->vector (reverse r))
+	    (let-values (((item next) (parse-item value i)))
+	      (loop next (cons (convert item) r))))))
+
     (define (parse-record query payload)
       (define (read-fix payload offset size)
 	(let ((end (+ offset size)))
@@ -691,6 +723,7 @@
 	  (hex-string->bytevector (utf8->string (bytevector-copy value 2))))
 
 	;; i need something...
+	;; catalog/pg_type.h should be the one
 	(case type
 	  ;; bigint, bigserial, integer, float
 	  ((20 23 23 1700 700 21 21 23)
@@ -720,6 +753,14 @@
 	  ((17) (parse-bytea value))
 	  ;; should we return UUID for Sagittarius?
 	  ((2950) (utf8->string value))
+	  ;; Arrays
+	  ;; char/varchar array (not sure how we can get 1002 _char)
+	  ((1002 1009 1014 1015) (parse-array value utf8->string))
+	  ((1000)
+	   (parse-array value (lambda (v) (string=? (utf8->string v) "t"))))
+	  ((1001) (parse-array value parse-bytea))
+	  ((1005 1007 1016 1021 1022)
+	   (parse-array value (lambda (v) (string->number (utf8->string v)))))
 	  ;; else (just return for now)
 	  (else  value)))
 
