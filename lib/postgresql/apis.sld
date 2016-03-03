@@ -422,6 +422,9 @@
     (define (postgresql-execute-sql! conn sql)
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn)))
+	(postgresql-send-sync-message out)
+	(postgresql-read-response in) ;; ignore #\Z
+
 	(postgresql-send-query-message out sql)
 	;; get
 	(guard (e (else

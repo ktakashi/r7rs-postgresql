@@ -281,10 +281,7 @@
 	(send-bytes out prepared)
 	(write-u8 0 out)
 	(send-s16 out param-len) ;; all text for now
-	(let loop ((i 0))
-	  (unless (= i param-len)
-	    (send-s16 out 0)
-	    (loop (+ i 1))))
+	(for-each (lambda (param) (send-s16 out 0)) params)
 	(send-s16 out param-len)
 	(for-each (lambda (param)
 		    (send-s32 out (bytevector-length param))
