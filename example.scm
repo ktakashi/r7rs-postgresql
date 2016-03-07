@@ -83,10 +83,10 @@
 
 ;; max column test
 (let ((p (postgresql-prepared-statement 
-	  conn "insert into test (id, name) values ($1, 'name')")))
+	  conn "insert into test (id, name) values ($1, $2)")))
   (let loop ((i 0))
     (unless (= i 100)
-      (postgresql-bind-parameters! p i)
+      (postgresql-bind-parameters! p i "name")
       (postgresql-execute! p)
     (loop (+ i 1))))
   (postgresql-close-prepared-statement! p))

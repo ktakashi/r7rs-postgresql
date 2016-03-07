@@ -481,7 +481,7 @@
 		(else (loop r rows))))))))
 
     (define-record-type postgresql-statement
-      (make-postgresql-prepared-statement connection sql parameters)
+      (make-postgresql-prepared-statement connection sql parameters portal)
       postgresql-prepared-statement?
       (connection postgresql-prepared-statement-connection)
       (sql        postgresql-prepared-statement-sql)
@@ -489,7 +489,6 @@
       (name       postgresql-prepared-statement-name
 		  postgresql-prepared-statement-name-set!)
       ;; underling portal name
-      #;
       (portal     postgresql-prepared-statement-portal
 		  postgresql-prepared-statement-portal-set!)
       (parameters postgresql-prepared-statement-parameters
@@ -556,7 +555,7 @@
     ;; for god sake....
     (define (postgresql-prepared-statement conn sql)
       (init-prepared-statement
-       (make-postgresql-prepared-statement conn sql #f)))
+       (make-postgresql-prepared-statement conn sql #f #f)))
 
     (define (postgresql-bind-parameters! prepared . params)
       (define conn (postgresql-prepared-statement-connection prepared))
@@ -567,20 +566,31 @@
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (name (postgresql-prepared-statement-name prepared)))
+	;; Old info but keep it for may sake.
 	;; we need to send Sync before bind a parameter in case this
 	;; binding is middle of the process (e.g. not called execute!)
 	;; otherwise PostgreSQL respond error 42P03
-	(postgresql-send-sync-message out)
-	(postgresql-read-response in)
+	;;(postgresql-send-sync-message out)
+	;;(postgresql-read-response in)
+
+	;; above was (probably) needed because we didn't close portal
+	;; now we make sure portal is closed before sending Bind('B')
+	;; so it should be fine.
+	(when (postgresql-prepared-statement-portal prepared)
+	  (postgresql-send-close-message out #\P name))
 	;; to create the same portal if needed
 	(postgresql-send-bind-message out name name params '())
 	(postgresql-send-flush-message out)
 	;; handle response
+	(when (postgresql-prepared-statement-portal prepared)
+	  ;; ignore close
+	  (postgresql-read-response in))
 	(let-values (((code payload) (postgresql-read-response in)))
 	  ;; BindComplete(#\2)
 	  (unless (char=? code #\2)
 	    (error "postgresql-bind-parameters! failed to execute" code)))
 	(postgresql-prepared-statement-parameters-set! prepared params)
+	(postgresql-prepared-statement-portal-set! prepared name)
 	prepared))
 
     ;; CommandComplete tag (not needed...)
