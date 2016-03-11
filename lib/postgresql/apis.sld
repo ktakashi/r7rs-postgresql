@@ -790,7 +790,7 @@
 	   (parse-array value (lambda (value) 
 				(parse-timestamp value (= type 1185)))))
 	  ;; else (just return for now)
-	  (else (display type) (newline) value)))
+	  (else value)))
 
       (let* ((n (bytevector-u16-ref-be payload 0))
 	     (vec (make-vector n #f))
