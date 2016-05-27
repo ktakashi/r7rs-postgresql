@@ -189,7 +189,7 @@ High level APIs
 - `*postgresql-write-data-handler*`
 
  Handler of COPY from stdin command. The value must be a procedure and
- takes 2 arguments, data type and data. The data type could be one of
+ take 2 arguments, data type and data. The data type could be one of
  the following symbols;
 
  - header
@@ -204,14 +204,23 @@ High level APIs
   there is no more data to send, then the handler must return `#f`
   otherwise it would go into inifinite loop.
 
-  When the data type is `complete` then the given data is `#t`. This indicates
-  the COPY command is done.
+  When the data type is `complete` then the given data is `#t`. This
+  indicates the COPY command is done.
 
 
   These handlers are currently a thin wrapper of the COPY
   command. Using them, users need to know about how the data is
   sent. For more detail, please refer the PostgreSQL manual.
 
+- `*postgresql-unknown-type-handler*`
+
+  Handler of unknown type, which is the library default couldn't
+  handle converting the value according to the type identifier. The
+  value must be aprocedure and take 2 arguments; _type_ and
+  _value_. The _type_ is an integer which represents PostgreSQL
+  internal type defined in `catalog/pg_type.h` header file of
+  PostgreSQL source. The _value_ is a raw value of SQL query,
+  bytevector.
 
 Low level APIs
 --------------

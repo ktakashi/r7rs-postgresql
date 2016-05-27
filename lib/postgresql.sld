@@ -58,6 +58,7 @@
 	  *postgresql-copy-data-handler*
 	  *postgresql-write-data-handler*
 	  *postgresql-notice-handler*
+	  *postgresql-unknown-type-handler*
 
 	  postgresql-transaction-mode
 

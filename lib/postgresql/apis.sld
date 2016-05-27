@@ -56,6 +56,7 @@
 	  *postgresql-copy-data-handler*
 	  *postgresql-write-data-handler*
 	  *postgresql-notice-handler*
+	  *postgresql-unknown-type-handler*
 
 	  postgresql-fetch-query!
 
@@ -132,6 +133,7 @@
     ;; default doing nothing
     (define (default-copy-data-handler type data) #f)
     (define (default-notice-handler code payload) #f)
+    (define (default-unknown-type-handler type value) value)
 
     (define *postgresql-copy-data-handler*
       (make-parameter default-copy-data-handler))
@@ -139,6 +141,8 @@
       (make-parameter default-copy-data-handler))
     (define *postgresql-notice-handler*
       (make-parameter default-notice-handler))
+    (define *postgresql-unknown-type-handler*
+      (make-parameter default-unknown-type-handler))
 
     (define-record-type postgresql-connection
       (make-postgresql-connection host port database username password)
@@ -760,8 +764,6 @@
 	  ;; bigint, bigserial, integer, float
 	  ((20 23 23 1700 700 21 21 23)
 	   (string->number (utf8->string value)))
-	  ;; oidoid
-	  ((26) (string->number (utf8->string value)))
 	  ((701) (inexact (string->number (utf8->string value))))
 	  ;; time related
 	  ;; date
@@ -772,8 +774,6 @@
 	  ((1114 1184) (parse-timestamp value (= type 1184)))
 	  ;; character, character varying
 	  ((25 1042 1043 1560 1562) (utf8->string value))
-	  ;; nameoid
-	  ((19) (utf8->string value))
 	  ((16) (string=? (utf8->string value) "t"))
 	  ((17) (parse-bytea value))
 	  ;; should we return UUID for Sagittarius?
@@ -793,9 +793,7 @@
 	  ((1115 1185)
 	   (parse-array value (lambda (value) 
 				(parse-timestamp value (= type 1185)))))
-	  ;; else (just return for now)
-	  ;; FIXME  we might want to custom conversion mechanism
-	  (else value)))
+	  (else ((*postgresql-unknown-type-handler*) type value))))
 
       (let* ((n (bytevector-u16-ref-be payload 0))
 	     (vec (make-vector n #f))
