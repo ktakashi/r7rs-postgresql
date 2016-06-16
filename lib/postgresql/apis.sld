@@ -80,10 +80,12 @@
   (import (scheme base)
 	  (scheme write)
 	  (scheme char)
-	  (postgresql messages)
+	  ;; (postgresql messages)
+	  (postgresql buffer)
 	  (postgresql digest md5)
 	  (postgresql misc socket)
 	  (postgresql misc bytevectors))
+  ;;(begin (define (make-postgresql-out-buffer o) o))
   (cond-expand
    ((library (srfi 19))
     (import (srfi 19))
@@ -181,7 +183,8 @@
 				   (postgresql-connection-port conn))))
 	(postgresql-connection-socket-set! conn s)
 	(postgresql-connection-sock-in-set! conn (socket-input-port s))
-	(postgresql-connection-sock-out-set! conn (socket-output-port s))
+	(postgresql-connection-sock-out-set! conn
+	 (make-postgresql-out-buffer (socket-output-port s)))
 	(postgresql-connection-counter-set! conn 0)
 	conn))
 
@@ -430,6 +433,7 @@
 	(postgresql-read-response in) ;; ignore #\Z
 
 	(postgresql-send-query-message out sql)
+	(postgresql-send-flush-message out)
 	;; get
 	(guard (e (else
 		   ;; must be #\E so we need to receive #\Z
@@ -556,17 +560,26 @@
 		  "postgresql-prepared-statement: failed to get description"
 		  code))))))
 
-    ;; for god sake....
+    ;; TODO
+    ;; Creating prepared statement or binding parameter to it immediately
+    ;; would not be a good idea. Delaying creating or binding can be done
+    ;; since we are using abstraction layer of prepared statement, and it
+    ;; (most likely) improves performance. (not sure yet, so we need to
+    ;; measure when we implemented).
+    ;; Followings are the sort of pros and cons:
+    ;; Cons
+    ;;  - error handling would be a bit more complex
+    ;;    executing SQL or creating prepared statement?
+    ;;  - extra memory space
+    ;; Pros
+    ;;  - unused prepared statement won't bother the server
+    ;;  - less I/O operation (should improve performance as well)
     (define (postgresql-prepared-statement conn sql)
       (init-prepared-statement
        (make-postgresql-prepared-statement conn sql #f #f)))
 
     (define (postgresql-bind-parameters! prepared . params)
       (define conn (postgresql-prepared-statement-connection prepared))
-      (define (convert param)
-	(if (vector? param)
-	    (vector->array param)
-	    param))
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (name (postgresql-prepared-statement-name prepared)))

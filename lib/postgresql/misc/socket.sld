@@ -30,21 +30,7 @@
 
 (define-library (postgresql misc socket)
   (cond-expand
-   ;; for performance
-   ;; with out this, it's as twice as slow...
-   (sagittarius
-    (import (scheme base)
-	    (sagittarius)
-	    (rename (srfi 106) 
-		    (socket-input-port s:socket-input-port)
-		    (socket-output-port s:socket-output-port)))
-    (begin
-      (define (socket-input-port s)
-	(buffered-port (s:socket-input-port s) 'line))
-      (define (socket-output-port s)
-	(buffered-port (s:socket-output-port s) 'block))))
-   ((library (srfi 106))
-    (import (srfi 106)))
+   ((library (srfi 106)) (import (srfi 106)))
    (chibi
     ;; only support what we need.
     (import (scheme base) (chibi net) (scheme cxr) (chibi filesystem))
