@@ -50,6 +50,14 @@
     (print q))
   (postgresql-close-prepared-statement! p))
 
+(let ((p (postgresql-prepared-statement 
+	  conn "insert into test (id, name) values ($1, $2)")))
+  (print (postgresql-prepared-statement-sql p))
+  (print (postgresql-bind-parameters! p 3 '()))
+  (let ((q (postgresql-execute! p)))
+    (print q))
+  (postgresql-close-prepared-statement! p))
+
 (let ((r (postgresql-execute-sql! conn "select * from test")))
   (print (postgresql-query-descriptions r))
   (print (postgresql-fetch-query! r))

@@ -239,6 +239,7 @@
 		   ((time? item) 
 		    (write-string (->timestamp (time-utc->date item)) out))
 		   ((vector? item) (write-string (->array item) out))
+		   ((null? item) (write-string "NULL" out))
 		   (else
 		    (error "postgresql-send-bind-message: unsupported type" v)))
 		  (loop (+ i 1)))))))
@@ -251,6 +252,7 @@
 	      ((date? v)   (string->utf8 (->timestamp v)))
 	      ((time? v)   (->bytevector (time-utc->date v)))
 	      ((vector? v) (string->utf8 (->array v)))
+	      ((null? v) (string->utf8 "NULL"))
 	      (else 
 	       (error "postgresql-send-bind-message: unsupported type" v))))
       ;; i think these must be one or the other but
