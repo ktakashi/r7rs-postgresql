@@ -58,8 +58,10 @@
     (print q))
   (postgresql-close-prepared-statement! p))
 
+(print "select * from test")
 (let ((r (postgresql-execute-sql! conn "select * from test")))
   (print (postgresql-query-descriptions r))
+  (print (postgresql-fetch-query! r))
   (print (postgresql-fetch-query! r))
   (print (postgresql-fetch-query! r))
   (print (postgresql-fetch-query! r))

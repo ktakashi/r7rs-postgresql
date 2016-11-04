@@ -239,6 +239,7 @@
 		   ((time? item) 
 		    (write-string (->timestamp (time-utc->date item)) out))
 		   ((vector? item) (write-string (->array item) out))
+		   ;; TODO is this correct?
 		   ((null? item) (write-string "NULL" out))
 		   (else
 		    (error "postgresql-send-bind-message: unsupported type" v)))
@@ -252,7 +253,8 @@
 	      ((date? v)   (string->utf8 (->timestamp v)))
 	      ((time? v)   (->bytevector (time-utc->date v)))
 	      ((vector? v) (string->utf8 (->array v)))
-	      ((null? v) (string->utf8 "NULL"))
+	      ;; special case
+	      ((null? v) #f)
 	      (else 
 	       (error "postgresql-send-bind-message: unsupported type" v))))
       ;; i think these must be one or the other but
@@ -272,10 +274,11 @@
 			 (* 2 param-len)
 			 2 ;; parameter counts
 			 (let loop ((r 0) (params params))
-			   (if (null? params)
-			       r
-			       (loop (+ 4 (bytevector-length (car params)) r)
-				     (cdr params))))
+			   (cond ((null? params) r)
+				 ((car params)
+				  (loop (+ 4 (bytevector-length (car params)) r)
+					(cdr params)))
+				 (else (loop (+ 4 r) (cdr params)))))
 			 2 ;; result column format
 			 ))
 	(send-bytes out portal)
@@ -286,8 +289,14 @@
 	(for-each (lambda (param) (send-s16 out 0)) params)
 	(send-s16 out param-len)
 	(for-each (lambda (param)
-		    (send-s32 out (bytevector-length param))
-		    (send-bytes out param)
+		    (cond (param
+			   (send-s32 out (bytevector-length param))
+			   (send-bytes out param))
+			  (else
+			   ;; NB: even though it's called s32 but actual
+			   ;;     implementation is u32. so -1 is
+			   ;;     #xFFFFFFFF
+			   (send-s32 out #xFFFFFFFF)))
 		    ;;(write-u8 0 out)
 		    )
 		  params)
