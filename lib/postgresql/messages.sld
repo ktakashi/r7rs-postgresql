@@ -123,6 +123,14 @@
     ;; it's not specified but all messages except startup
     ;; and ssl request start message type (byte1) and length (int32)
     (define (postgresql-read-response in)
+      (define (read-n on in)
+	(define bv (make-bytevector on))
+	(let loop ((n n) (off 0))
+	  (let ((r (read-bytevector! bv in off on)))
+	    (if (= r n)
+		bv
+		(loop (- n r) (+ off r))))))
+      
       (let* ((ch (integer->char (read-u8 in)))
 	     (size (bytevector->integer (read-bytevector 4 in)))
 	     (payload (read-bytevector (- size 4) in)))
