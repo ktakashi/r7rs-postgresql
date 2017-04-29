@@ -33,7 +33,8 @@
 ;; This library provides buffering of socket port.
 ;; (NB: implmented atop custom port would be cleaner if we could use.)
 (define-library (postgresql buffer)
-  (export postgresql-send-startup-message
+  (export postgresql-send-ssl-request
+	  postgresql-send-startup-message
 	  postgresql-send-password-message
 	  postgresql-send-terminate-message
 	  postgresql-send-sync-message
@@ -48,7 +49,6 @@
 	  postgresql-send-copy-fail-message
 	  postgresql-send-copy-done-message
 	  postgresql-read-response
-
 
 	  make-postgresql-out-buffer
 	  )
@@ -80,7 +80,10 @@
 	((_ name real (buffer args ...))
 	 (define (name buffer args ...)
 	   (real (%bb buffer) args ...)))))
-	
+
+    (define-forward postgresql-send-ssl-request
+      m:postgresql-send-ssl-request
+      (out))
     (define-forward postgresql-send-startup-message
       m:postgresql-send-startup-message
       (out messages))

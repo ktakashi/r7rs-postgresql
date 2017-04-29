@@ -84,6 +84,7 @@
 	  (postgresql buffer)
 	  (postgresql digest md5)
 	  (postgresql misc socket)
+	  (postgresql misc ssl)
 	  (postgresql misc bytevectors))
   ;;(begin (define (make-postgresql-out-buffer o) o))
   (cond-expand
@@ -204,7 +205,24 @@
 		  (write-char (integer->char b) out)
 		  (loop (+ i 1))))))))
 
-    (define (postgresql-login! conn)
+    (define (postgresql-secure-connection! conn)
+      (define in  (postgresql-connection-sock-in conn))
+      (define out (postgresql-connection-sock-out conn))
+      (postgresql-send-ssl-request out)
+      (case (integer->char (read-u8 in))
+	((#\S)
+	 (let ((sock (socket->ssl-socket (postgresql-connection-socket conn))))
+	   (postgresql-connection-socket-set! conn sock)
+	   (postgresql-connection-sock-in-set! conn
+					       (ssl-socket-input-port sock))
+	   (postgresql-connection-sock-out-set! conn
+						(ssl-socket-output-port sock))
+	   #t))
+	((#\N) #f)
+	(else (error "postgresql-secure-connection!: unknown response"))))
+      
+    (define (postgresql-login! conn . maybe-ssl)
+      (define ssl? (and (not (null? maybe-ssl)) (car maybe-ssl)))
       (define read-string read-null-terminated-string)
       (define (store-params params)
 	(define len (bytevector-length params))
@@ -240,6 +258,9 @@
 	    (pass (postgresql-connection-password conn))
 	    (database (let ((d (postgresql-connection-database conn)))
 			(if d (list (cons "database" d)) '()))))
+	(when (and ssl? (not (postgresql-secure-connection! conn)))
+	  (close-conn conn)
+	  (error "Failed to establish SSL connection"))
 	(postgresql-send-startup-message out (cons (cons "user" user) database))
 	;; authenticate
 	(let loop ((first #t))

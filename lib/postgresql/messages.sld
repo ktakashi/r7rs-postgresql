@@ -29,7 +29,8 @@
 ;;;  
 
 (define-library (postgresql messages)
-  (export postgresql-send-startup-message
+  (export postgresql-send-ssl-request
+	  postgresql-send-startup-message
 	  postgresql-send-password-message
 	  postgresql-send-terminate-message
 	  postgresql-send-sync-message
@@ -43,7 +44,8 @@
 	  postgresql-send-copy-data-message
 	  postgresql-send-copy-fail-message
 	  postgresql-send-copy-done-message
-	  postgresql-read-response)
+	  postgresql-read-response
+	  )
   (import (scheme base) 
 	  (scheme write)
 	  (postgresql misc socket)
@@ -70,6 +72,11 @@
     (define (send-bytes out bv)
       (write-bytevector bv out))
 
+    (define (postgresql-send-ssl-request out)
+      (send-s32 out 8)
+      (send-s32 out 80877103)
+      (flush-output-port out))
+    
     ;; internal
     ;; - OUT must be an binary output port (socket-output-port)
     ;; - PARAMS must be alist. ((string . string) ...)
