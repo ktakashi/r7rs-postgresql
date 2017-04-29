@@ -29,7 +29,10 @@
 ;;;  
 
 (define-library (postgresql misc ssl)
-  (export socket->ssl-socket)
+  (export socket->ssl-socket
+	  ssl-socket-input-port
+	  ssl-socket-output-port
+	  ssl-socket? ssl-socket-close)
   (import (scheme base))
   (cond-expand
    (sagittarius
@@ -38,8 +41,19 @@
        (define (socket->ssl-socket sock)
 	 (let ((tls-sock (socket->tls-socket sock)))
 	   ;; TODO hello extension
-	   (tls-client-handshake tls-sock)))))
+	   (tls-client-handshake tls-sock)))
+       (define ssl-socket-input-port tls-socket-input-port)
+       (define ssl-socket-output-port tls-socket-output-port)
+       (define ssl-socket? tls-socket?)
+       (define ssl-socket-close tls-socket-close)))
    (else
     (begin
       (define (socket->ssl-socket socket)
-	(error "socket->ssl-socket: not supported (PR is welcome)"))))))
+	(error "socket->ssl-socket: not supported (PR is welcome)"))
+      (define (ssl-socket-input-port socket)
+	(error "ssl-socket-input-port: not supported (PR is welcome)"))
+      (define (ssl-socket-output-port socket)
+	(error "ssl-socket-output-port: not supported (PR is welcome)"))
+      (define (ssl-socket? obj) #f)
+      (define (ssl-socket-close socket)
+	(error "ssl-socket-close: not supported (PR is welcome)"))))))

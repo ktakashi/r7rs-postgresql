@@ -190,7 +190,10 @@
 	conn))
 
     (define (close-conn conn)
-      (socket-close (postgresql-connection-socket conn))
+      (define sock (postgresql-connection-socket conn))
+      (if (ssl-socket? sock)
+	  (ssl-socket-close sock)
+	  (socket-close sock))
       ;; invalidate it
       (postgresql-connection-socket-set! conn #f))
 
@@ -214,9 +217,9 @@
 	 (let ((sock (socket->ssl-socket (postgresql-connection-socket conn))))
 	   (postgresql-connection-socket-set! conn sock)
 	   (postgresql-connection-sock-in-set! conn
-					       (ssl-socket-input-port sock))
+	     (ssl-socket-input-port sock))
 	   (postgresql-connection-sock-out-set! conn
-						(ssl-socket-output-port sock))
+	     (make-postgresql-out-buffer (ssl-socket-output-port sock)))
 	   #t))
 	((#\N) #f)
 	(else (error "postgresql-secure-connection!: unknown response"))))
@@ -251,16 +254,15 @@
 	       ((*postgresql-notice-handler*) code (utf8->string payload 1))
 	       (next in)))
 	    ((#\Z) #t))))
-
+      (when (and ssl? (not (postgresql-secure-connection! conn)))
+	(close-conn conn)
+	(error "Failed to establish SSL connection"))
       (let ((in   (postgresql-connection-sock-in conn))
 	    (out  (postgresql-connection-sock-out conn))
 	    (user (postgresql-connection-username conn))
 	    (pass (postgresql-connection-password conn))
 	    (database (let ((d (postgresql-connection-database conn)))
 			(if d (list (cons "database" d)) '()))))
-	(when (and ssl? (not (postgresql-secure-connection! conn)))
-	  (close-conn conn)
-	  (error "Failed to establish SSL connection"))
 	(postgresql-send-startup-message out (cons (cons "user" user) database))
 	;; authenticate
 	(let loop ((first #t))
