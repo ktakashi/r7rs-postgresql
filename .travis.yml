@@ -18,8 +18,8 @@ branches:
 before_script:
   - if [ "$BUILD" = "sagittarius" ]; then
        sudo apt-get install cmake libgc-dev zlib1g-dev libffi-dev;
-       curl -L -o version $SAGITTARIUS_URL/downloads/latest-version.txt;
-       curl -L -o sagittarius.tar.gz $SAGITTARIUS_URL/downloads/sagittarius-`cat version`.tar.gz;
+       curl -L -o version "$SAGITTARIUS_URL/downloads/latest-version.txt";
+       curl -L -o sagittarius.tar.gz "$SAGITTARIUS_URL/downloads/sagittarius-`cat version`.tar.gz";
        tar xvf sagittarius.tar.gz;
        cd sagittarius-`cat version`;
        make -j8;
@@ -31,7 +31,7 @@ before_script:
        sudo make install;
     fi
   - if [ "$BUILD" = "gauche" ]; then
-       curl -L -o http://prdownloads.sourceforge.net/gauche/Gauche-0.9.5.tgz;
+       curl -L -o 'http://prdownloads.sourceforge.net/gauche/Gauche-0.9.5.tgz';
        tar xvf Gauche-0.9.5.tgz;
        cd Gauche-0.9.5;
        ./configure;
