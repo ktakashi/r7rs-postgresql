@@ -1,0 +1,43 @@
+notifications:
+  recipients:
+    - sagittarius-ci@googlegroups.com
+language: c
+sudo: required
+env:
+  global:
+    - SAGITTARIUS_URL 'https://bitbucket.org/ktakashi/sagittarius-scheme'
+  matrix:
+    - SCHEME='chibi-scheme -Ilib'    BUILD='chibi'
+    - SCHEME='gosh -r7 -Ilib'        BUILD='gauche'
+    - SCHEME='sagittarius -r7 -Llib' BUILD='sagittarius'
+
+branches:
+  only:
+    - master
+
+before_script:
+  - if [ "$BUILD" = "sagittarius" ]; then
+       sudo apt-get install cmake libgc-dev zlib1g-dev libffi-dev;
+       curl -L -o version $SAGITTARIUS_URL/downloads/latest-version.txt
+       curl -L -o sagittarius.tar.gz $SAGITTARIUS_URL/downloads/sagittarius-`cat version`.tar.gz
+       tar xvf sagittarius.tar.gz
+       cd sagittarius-`cat version`
+       make -j8
+       sudo make install
+    fi
+  - if [ "$BUILD" = "chibi" ]; then
+       git clone https://github.com/ashinn/chibi-scheme.git
+       cd chibi-scheme
+       sudo make install
+    fi
+  - if [ "$BUILD" = "gauche" ]; then
+       curl -L -o http://prdownloads.sourceforge.net/gauche/Gauche-0.9.5.tgz
+       tar xvf Gauche-0.9.5.tgz
+       cd Gauche-0.9.5
+       ./configure
+       make
+       sudo make install
+    fi
+
+script:
+  - $SCHEME 
