@@ -70,7 +70,7 @@
 ;; user: postgres
 ;; pass: postgres
 (define conn (make-postgresql-connection 
-	      "localhost" "5432" #f "postgres" "postgres"))
+	      "localhost" "5432" #f "postgres" ""))
 
 (test-assert "open connection" (postgresql-open-connection! conn))
 

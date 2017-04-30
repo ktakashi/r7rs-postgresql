@@ -8,6 +8,8 @@ env:
     - SCHEME='chibi-scheme -Ilib'    BUILD='chibi'
     - SCHEME='gosh -r7 -Ilib'        BUILD='gauche'
     - SCHEME='sagittarius -r7 -Llib' BUILD='sagittarius'
+services:
+  - postgresql
 
 branches:
   only:
@@ -20,6 +22,7 @@ before_script:
        curl -L -o sagittarius.tar.gz https://bitbucket.org/ktakashi/sagittarius-scheme/downloads/sagittarius-`cat version`.tar.gz;
        tar xvf sagittarius.tar.gz;
        cd sagittarius-`cat version`;
+       cmake .;
        make -j8;
        sudo make install;
     fi
