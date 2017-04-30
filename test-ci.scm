@@ -74,7 +74,10 @@
 
 (test-assert "open connection" (postgresql-open-connection! conn))
 
-(test-assert "try secure" (postgresql-secure-connection! conn))
+(cond-expand
+ (sagittarius
+  (test-assert "try secure" (postgresql-secure-connection! conn)))
+ (else #f))
 (test-assert "login" (postgresql-login! conn))
 
 ;; may not be there yet (causes an error if there isn't)
@@ -86,7 +89,10 @@
 (test-assert "terminate" (postgresql-terminate! conn))
 
 (test-assert (postgresql-open-connection! conn))
-(test-assert "try secure" (postgresql-secure-connection! conn))
+(cond-expand
+ (sagittarius
+  (test-assert "try secure" (postgresql-secure-connection! conn)))
+ (else #f))
 (test-assert (postgresql-login! conn))
 
 (let ((r (postgresql-execute-sql! conn "select * from test")))
