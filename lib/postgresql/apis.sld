@@ -32,6 +32,7 @@
   (export make-postgresql-connection
 	  postgresql-connection?
 	  postgresql-open-connection!
+	  postgresql-secure-connection!
 	  postgresql-login!
 	  postgresql-terminate!
 
