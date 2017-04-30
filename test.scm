@@ -9,9 +9,8 @@
  ((library (srfi 64))
   (import (srfi 64)))
  ((library (chibi test))
-  ;; test-equal in (chibi test) contains a bug
-  ;; (the macro can't be expanded properly)
-  ;; so make thin wrapper
+  ;; test-equal in (chibi test) is not SRFI-64 compatible
+  ;; so wrap it
   (import (except (chibi test) test-equal))
   (begin
     (define-syntax test-equal
