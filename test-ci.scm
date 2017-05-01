@@ -25,12 +25,10 @@
   (cond-expand
    (gauche-0.9.4
     (import (rename (gauche test)
-		    (test-start test-begin)
-		    (test-section test-group))))
+		    (test-start test-begin))))
    (else
     (import (rename (only (gauche test) test-start test-section test* test-end)
-		    (test-start test-begin)
-		    (test-section test-group)))))
+		    (test-start test-begin)))))
   (begin
     (define-syntax test-equal
       (syntax-rules ()
@@ -43,7 +41,14 @@
 	((_ name expr)
 	 (test* name #t (not (not expr))))
 	((_ expr)
-	 (test-assert 'expr expr))))))
+	 (test-assert 'expr expr))))
+    (define-syntax test-group
+      (syntax-rules ()
+	((_ msg exprs ...)
+	 (begin
+	   (test-section msg)
+	   exprs ...))))))
+ 
  (else
   (import (scheme write))
   (begin
