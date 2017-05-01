@@ -4,8 +4,10 @@ notifications:
 language: c
 sudo: required
 env:
+  global:
+    - PASSWORD=''
   matrix:
-    - SCHEME='chibi-scheme -Ilib'    BUILD='chibi'
+#    - SCHEME='chibi-scheme -Ilib'    BUILD='chibi'
     - SCHEME='gosh -r7 -Ilib'        BUILD='gauche'
     - SCHEME='sagittarius -r7 -Llib' BUILD='sagittarius'
 services:
