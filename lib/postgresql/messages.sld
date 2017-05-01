@@ -131,12 +131,14 @@
     ;; and ssl request start message type (byte1) and length (int32)
     (define (postgresql-read-response in)
       (define (read-n n in)
-	(define bv (make-bytevector n))
-	(let loop ((n n) (off 0))
-	  (let ((r (read-bytevector! bv in off)))
-	    (if (= r n)
-		bv
-		(loop (- n r) (+ off r))))))
+	(if (zero? n)
+	    #u8()
+	    (let ((bv (make-bytevector n)))
+	      (let loop ((n n) (off 0))
+		(let ((r (read-bytevector! bv in off)))
+		  (if (= r n)
+		      bv
+		      (loop (- n r) (+ off r))))))))
       
       (let* ((ch (integer->char (read-u8 in)))
 	     (size (bytevector->integer (read-n 4 in)))
