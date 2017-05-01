@@ -33,7 +33,8 @@
    ((library (srfi 106)) (import (srfi 106)))
    (chibi
     ;; only support what we need.
-    (import (scheme base) (chibi net) (scheme cxr) (chibi filesystem))
+    (import (scheme base) (chibi net) (scheme cxr) (chibi filesystem)
+	    (chibi process))
     (begin
       ;; well...
       (define socket? list?)
@@ -46,8 +47,10 @@
       (define (socket-close sock) (close-file-descriptor (car sock)))
       ;; do nothing for now
       (define (socket-shutdown sock how) #t)
-      )))
-  (cond-expand
+      (define hope-one-shot-execution
+	(begin
+	  (set-signal-action! signal/pipe
+	    (lambda (signum) (error "received SIGPIPE")))))))
    (gauche (import (gauche base))
 	   (begin (define socket? (with-module srfi-106 socket?))))
    (else))
