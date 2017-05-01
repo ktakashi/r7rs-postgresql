@@ -1,5 +1,6 @@
 (import (scheme base)
 	(scheme write)
+	(scheme process-context)
 	(postgresql))
 
 (cond-expand
@@ -40,8 +41,8 @@
     (define-syntax test-assert
       (syntax-rules ()
 	((_ name expr)
-	 (test* name #t expr))
-	((_ expect expr)
+	 (test* name #t (not (not expr))))
+	((_ expr)
 	 (test-assert 'expr expr))))))
  (else
   (import (scheme write))
@@ -70,7 +71,10 @@
 ;; user: postgres
 ;; pass: postgres
 (define conn (make-postgresql-connection 
-	      "localhost" "5432" #f "postgres" ""))
+	      "localhost" "5432" #f "postgres"
+	      (get-environment-variable "PASSWORD")))
+
+(test-group "Table creation"
 
 (test-assert "open connection" (postgresql-open-connection! conn))
 
@@ -87,6 +91,20 @@
 	       "create table test (id integer, name varchar(50))"))
 (postgresql-execute-sql! conn "commit")
 (test-assert "terminate" (postgresql-terminate! conn))
+
+)
+
+(test-group "Query"
+
+(define (test-insert value)
+  (let ((p (postgresql-prepared-statement 
+	    conn "insert into test (id, name) values ($1, $2)")))
+    (test-assert (postgresql-prepared-statement? p))
+    (test-equal "insert into test (id, name) values ($1, $2)"
+		(postgresql-prepared-statement-sql p))
+    (test-assert (postgresql-bind-parameters! p 3 value))
+    (test-assert 1 (postgresql-execute! p))
+    (test-assert (postgresql-close-prepared-statement! p))))
 
 (test-assert (postgresql-open-connection! conn))
 (cond-expand
@@ -109,16 +127,6 @@
   "insert into test (id, name) values (-1, 'test name2')")
 (postgresql-execute-sql! conn  "commit")
 
-(define (test-insert value)
-  (let ((p (postgresql-prepared-statement 
-	    conn "insert into test (id, name) values ($1, $2)")))
-    (test-assert (postgresql-prepared-statement? p))
-    (test-equal "insert into test (id, name) values ($1, $2)"
-		(postgresql-prepared-statement-sql p))
-    (test-assert (postgresql-bind-parameters! p 3 value))
-    (test-assert 1 (postgresql-execute! p))
-    (test-assert (postgresql-close-prepared-statement! p))))
-
 (test-insert "name")
 (test-insert '())
 
@@ -133,16 +141,19 @@
 ;; delete
 (test-equal 5 (postgresql-execute-sql! conn "delete from test"))
 
+)
+
+(test-group "Maximum rows"
+
 ;; max column test
-(test-assert 
- (let ((p (postgresql-prepared-statement 
-	   conn "insert into test (id, name) values ($1, $2)")))
-   (let loop ((i 0))
-     (unless (= i 100)
-       (postgresql-bind-parameters! p i "name")
-       (postgresql-execute! p)
-       (loop (+ i 1))))
-   (postgresql-close-prepared-statement! p)))
+(let ((p (postgresql-prepared-statement 
+	  conn "insert into test (id, name) values ($1, $2)")))
+  (let loop ((i 0))
+    (unless (= i 100)
+      (postgresql-bind-parameters! p i "name")
+      (postgresql-execute! p)
+      (loop (+ i 1))))
+  (postgresql-close-prepared-statement! p))
 (postgresql-execute-sql! conn "commit")
 
 (let ((p (postgresql-prepared-statement 
@@ -169,6 +180,9 @@
     (postgresql-fetch-query! q))
   (test-equal "60" '#(60 "name") (postgresql-fetch-query! q)))
 
+)
+
+(test-group "Non existing table"
 (postgresql-execute-sql! conn "drop table test")
 (postgresql-execute-sql! conn "commit")
 
@@ -189,6 +203,7 @@
     (postgresql-close-prepared-statement! ps)
     (test-assert "Shouldn't be here" #f)))
 
+)
 ;; terminate and close connection
 (postgresql-terminate! conn)
 
