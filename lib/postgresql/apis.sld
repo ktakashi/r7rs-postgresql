@@ -212,18 +212,22 @@
     (define (postgresql-secure-connection! conn)
       (define in  (postgresql-connection-sock-in conn))
       (define out (postgresql-connection-sock-out conn))
-      (postgresql-send-ssl-request out)
-      (case (integer->char (read-u8 in))
-	((#\S)
-	 (let ((sock (socket->ssl-socket (postgresql-connection-socket conn))))
-	   (postgresql-connection-socket-set! conn sock)
-	   (postgresql-connection-sock-in-set! conn
-	     (ssl-socket-input-port sock))
-	   (postgresql-connection-sock-out-set! conn
-	     (make-postgresql-out-buffer (ssl-socket-output-port sock)))
-	   #t))
-	((#\N) #f)
-	(else (error "postgresql-secure-connection!: unknown response"))))
+      (define (do-negotiation)
+	(postgresql-send-ssl-request out)
+	(case (integer->char (read-u8 in))
+	  ((#\S)
+	   (let ((sock (socket->ssl-socket
+			(postgresql-connection-socket conn))))
+	     (postgresql-connection-socket-set! conn sock)
+	     (postgresql-connection-sock-in-set! conn
+	       (ssl-socket-input-port sock))
+	     (postgresql-connection-sock-out-set! conn
+	       (make-postgresql-out-buffer (ssl-socket-output-port sock)))
+	     #t))
+	  ((#\N) #f)
+	  (else (error "postgresql-secure-connection!: unknown response"))))
+      (or (ssl-socket? (postgresql-connection-socket conn))
+	  (do-negotiation)))
       
     (define (postgresql-login! conn . maybe-ssl)
       (define ssl? (and (not (null? maybe-ssl)) (car maybe-ssl)))
