@@ -265,7 +265,7 @@
       (define (->bytevector v) 
 	(cond ((string? v) (string->utf8 v))
 	      ((number? v) (string->utf8 (number->string v)))
-	      ((boolean? v) (if v (string->utf8 #u8(116) #u8(102))))
+	      ((boolean? v) (if v #u8(116) #u8(102)))
 	      ((bytevector? v) v)
 	      ((date? v)   (string->utf8 (->timestamp v)))
 	      ((time? v)   (->bytevector (time-utc->date v)))
