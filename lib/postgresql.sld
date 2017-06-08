@@ -30,7 +30,8 @@
 
 ;; forwarding
 (define-library (postgresql)
-  (import (postgresql apis))
+  (import (postgresql apis)
+	  (postgresql conditions))
   (export make-postgresql-connection
 	  postgresql-connection?
 	  postgresql-open-connection!
@@ -71,4 +72,13 @@
 	  postgresql-access-mode-read-only
 	  postgresql-deferrable-on
 	  postgresql-deferrable-off
+
+	  postgresql-error?
+	  postgresql-error-severity
+	  postgresql-error-code
+	  postgresql-error-schema
+	  postgresql-error-table
+	  postgresql-error-column
+	  postgresql-error-data-type
+	  postgresql-error-constraint
 	  ))

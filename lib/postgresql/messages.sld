@@ -48,6 +48,7 @@
 	  )
   (import (scheme base) 
 	  (scheme write)
+	  (postgresql conditions)
 	  (postgresql misc socket)
 	  (postgresql misc bytevectors)
 	  (postgresql misc io))
@@ -145,13 +146,7 @@
 	     (payload (read-n (- size 4) in)))
 	(if (char=? ch #\E)
 	    (let ((fields (parse-message-fields payload)))
-	      (define (msg fields)
-		(define (get n)
-		  (cond ((assv n fields) => cdr) (else "")))
-		;; TODO should we also show source line or so?
-		(string-append (get #\S) " [" (get #\C) "] " (get #\M)
-			       " at '" (get #\R) "' "(get #\F) ":" (get #\L)))
-	      (error (msg fields)))
+	      (raise-postgresql-error fields))
 	    (values ch payload))))
 
     (define (postgresql-send-password-message out password)

@@ -3,6 +3,7 @@
 	(postgresql misc bytevectors)
 	(postgresql misc socket)
 	(postgresql messages)
+	(postgresql conditions)
 	(postgresql))
 
 (cond-expand
@@ -121,6 +122,14 @@
 	      (make-postgresql-connection "localhost" "5432" 
 					  #f "postgres" "postgres")))
 
+
+(test-equal "condition (severity)"
+	    "ERROR"
+	    (guard (e ((postgresql-error? e)
+		       (postgresql-error-severity e))
+		      (else #f))
+	      (raise-postgresql-error '((#\S . "ERROR")))))
+	      
 
 (test-end)
 

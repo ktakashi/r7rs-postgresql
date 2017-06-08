@@ -424,8 +424,7 @@
 	    (when need-sync?
 	      (postgresql-send-sync-message out)
 	      (postgresql-read-response in))
-	    (error (error-object-message e2)
-		   (error-object-irritants e2)))
+	    (raise e2))
 	  (lambda () (postgresql-read-response in))))
        (lambda ()
 	 ((*postgresql-write-data-handler*) 'header
@@ -444,8 +443,7 @@
 	   (postgresql-send-sync-message out)
 	   ;; ignore #\Z
 	   (postgresql-read-response in))
-	 (error (error-object-message e)
-		(error-object-irritants e)))
+	 (raise e))
        (lambda ()
 	 (postgresql-read-response in) ;; #\c or error
 	 (when need-sync? (postgresql-send-sync-message out))
