@@ -81,13 +81,18 @@
   (import (scheme base)
 	  (scheme write)
 	  (scheme char)
-	  ;; (postgresql messages)
-	  (postgresql buffer)
 	  (postgresql digest md5)
 	  (postgresql misc socket)
 	  (postgresql misc ssl)
 	  (postgresql misc bytevectors))
-  ;;(begin (define (make-postgresql-out-buffer o) o))
+  (cond-expand
+   (sagittarius
+    (import (postgresql messages) (sagittarius) (only (rnrs) buffer-mode))
+    (begin
+      (define (make-postgresql-out-buffer out)
+	(buffered-port out (buffer-mode block)))))
+   (else
+    (import (postgresql buffer))))
   (cond-expand
    ((library (srfi 19))
     (import (srfi 19))
