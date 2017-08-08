@@ -726,18 +726,21 @@
       (let ((out (postgresql-connection-sock-out conn))
 	    (in  (postgresql-connection-sock-in conn))
 	    (name (postgresql-prepared-statement-name prepared)))
+	(postgresql-send-sync-message out)
+	(postgresql-read-response in);; discard it
+
 	(postgresql-send-close-message out #\S name)
-	;; do we need this?
-	(postgresql-send-close-message out #\P name)
+	;; should be closed implicitly
+	;; (postgresql-send-close-message out #\P name)
 	(postgresql-send-flush-message out)
 	(let-values (((code payload) (postgresql-read-response in)))
 	  (unless (char=? code #\3)
 	    (error "postgresql-close-prepared-statement! failed to close"
 		   code prepared)))
-	(let-values (((code payload) (postgresql-read-response in)))
-	  (unless (char=? code #\3)
-	    (error "postgresql-close-prepared-statement! failed to close"
-		   code prepared)))
+	;; (let-values (((code payload) (postgresql-read-response in)))
+	;;   (unless (char=? code #\3)
+	;;     (error "postgresql-close-prepared-statement! failed to close"
+	;; 	   code prepared)))
 	(postgresql-prepared-statement-name-set! prepared #f)))
 
     ;; assumes given value is properly constructed

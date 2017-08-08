@@ -91,9 +91,13 @@
 
 ;; may not be there yet (causes an error if there isn't)
 (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
+(guard (e (else #t)) (postgresql-execute-sql! conn "drop table test2"))
 (test-assert "create tables"
 	     (postgresql-execute-sql! conn
 	       "create table test (id integer, name varchar(50))"))
+(test-assert "create tables"
+	     (postgresql-execute-sql! conn
+	       "create table test2 (guid uuid)"))
 (postgresql-execute-sql! conn "commit")
 (test-assert "terminate" (postgresql-terminate! conn))
 
@@ -145,6 +149,15 @@
 
 ;; delete
 (test-equal 5 (postgresql-execute-sql! conn "delete from test"))
+
+;; input value error
+(let ((p (postgresql-prepared-statement
+	  conn "insert into test2 (guid) values ($1)")))
+  (guard (e (else (postgresql-close-prepared-statement! p)
+		  (test-assert "ok" #t)))
+    (postgresql-bind-parameters! p "not a uuid")
+    (postgresql-execute! p)
+    (test-assert "must be an input check" #f)))
 
 )
 
