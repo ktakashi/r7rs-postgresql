@@ -92,12 +92,14 @@
 ;; may not be there yet (causes an error if there isn't)
 (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test"))
 (guard (e (else #t)) (postgresql-execute-sql! conn "drop table test2"))
+(guard (e (else #t)) (postgresql-execute-sql! conn "drop table text_text"))
 (test-assert "create tables"
 	     (postgresql-execute-sql! conn
 	       "create table test (id integer, name varchar(50))"))
 (test-assert "create tables"
-	     (postgresql-execute-sql! conn
-	       "create table test2 (guid uuid)"))
+	     (postgresql-execute-sql! conn "create table test2 (guid uuid)"))
+(test-assert "create tables"
+	     (postgresql-execute-sql! conn "create table text_text (t text)"))
 (postgresql-execute-sql! conn "commit")
 (test-assert "terminate" (postgresql-terminate! conn))
 
@@ -222,6 +224,18 @@
     (test-assert "Shouldn't be here" #f)))
 
 )
+
+;; Japanese text
+(test-group "UTF-8"
+  (let ((p (postgresql-prepared-statement
+	    conn "insert into text_text (t) values ($1)"))
+	(msg "日本語テスト"))
+    (postgresql-bind-parameters! p msg)
+    (postgresql-execute! p)
+    (postgresql-close-prepared-statement! p)
+    (let ((r (postgresql-execute-sql! conn "select t from text_text")))
+      (test-equal `#(,msg) (postgresql-fetch-query! r)))))
+
 ;; terminate and close connection
 (postgresql-terminate! conn)
 
